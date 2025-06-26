@@ -1,0 +1,1 @@
+export function startOfflineSync(token?: string): void; 
