@@ -107,7 +107,7 @@ const GuardDashboard: React.FC = () => {
     {
       id: 1,
       name: 'Phone Camera (Main Gate)',
-      url: 'http://172.16.3.100:8081/video',
+      url: 'http://localhost:8000/video_feed',
       status: 'active',
       lastDetection: null as string | null,
       detectionCount: 0
@@ -139,33 +139,40 @@ const GuardDashboard: React.FC = () => {
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
   useEffect(() => {
-    if (!user?.id) return;
-    wsRef.current = new WebSocket(WS_URL(user.id.toString()));
+    if (!user?._id || typeof user._id !== 'string') {
+      console.warn('GuardDashboard: user._id is missing or invalid:', user?._id);
+      setWsStatus('disconnected');
+      return;
+    }
+    const wsUrl = WS_URL(user._id.toString());
+    console.log('Connecting to WebSocket:', wsUrl);
+    wsRef.current = new WebSocket(wsUrl);
     wsRef.current.onopen = () => setWsStatus('connected');
-    wsRef.current.onclose = () => setWsStatus('disconnected');
+    wsRef.current.onclose = (event) => {
+      setWsStatus('disconnected');
+      if (!event.wasClean) {
+        toast({ title: 'WebSocket closed unexpectedly', status: 'error' });
+      }
+    };
+    wsRef.current.onerror = (err) => {
+      setWsStatus('error');
+      toast({ title: 'WebSocket error', status: 'error', description: String(err) });
+      console.error('WebSocket error:', err);
+    };
     wsRef.current.onmessage = (event) => {
       try {
-        // Try to parse as JSON first
         const data = JSON.parse(event.data);
         setAlert(data);
         setRecentAlerts((prev) => [data, ...prev.slice(0, 9)]);
         onOpen();
         if (audioRef.current) audioRef.current.play();
-        
-        // Update analytics
         updateAnalytics(data);
       } catch (error) {
-        // If it's not JSON, it might be a welcome message or other text
         console.log('Received non-JSON message:', event.data);
-        // Don't treat welcome messages as alerts
         if (!event.data.includes('Welcome')) {
           // Handle other non-JSON messages if needed
         }
       }
-    };
-    wsRef.current.onerror = () => {
-      setWsStatus('error');
-      toast({ title: 'WebSocket error', status: 'error' });
     };
     return () => { wsRef.current && wsRef.current.close(); };
   }, [user]);
@@ -535,137 +542,43 @@ const GuardDashboard: React.FC = () => {
                   >
                     {/* Real video stream from phone camera */}
                     <Box
+                      position="relative"
                       w="full"
                       h="full"
-                      bg="gray.800"
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="center"
-                      position="relative"
-                      overflow="hidden"
                       borderRadius="md"
+                      overflow="hidden"
                     >
-                      {/* Actual video element for phone camera */}
-                      {selectedFeed === 1 && (
-                        <Box
-                          as="img"
-                          src="http://172.16.3.100:8081/video"
-                          alt="Live Camera Feed"
-                          w="full"
-                          h="full"
-                          objectFit="cover"
-                          fallback={
-                            <VStack spacing={4} color="gray.400">
-                              <Icon as={FiCamera} w={16} h={16} />
-                              <Text fontSize="lg" fontWeight="bold">
-                                Phone Camera Feed
-                              </Text>
-                              <Text fontSize="sm" textAlign="center">
-                                Loading camera stream...<br />
-                                Make sure IP Camera Lite is running
-                              </Text>
-                              <HStack spacing={4} mt={4}>
-                                <Badge colorScheme="blue" variant="subtle">
-                                  <HStack spacing={1}>
-                                    <Icon as={FiWifi} w={3} h={3} />
-                                    <Text>CONNECTING</Text>
-                                  </HStack>
-                                </Badge>
-                              </HStack>
-                            </VStack>
-                          }
-                        />
-                      )}
-                      
-                      {/* Simulated video for other cameras */}
-                      {selectedFeed !== 1 && (
-                        <Box
-                          w="80%"
-                          h="60%"
-                          bg="gray.700"
-                          borderRadius="md"
-                          position="relative"
-                          overflow="hidden"
-                        >
-                          {/* Simulated license plate detection box */}
-                          <Box
-                            position="absolute"
-                            top="40%"
-                            left="30%"
-                            w="40%"
-                            h="20%"
-                            border="2px solid"
-                            borderColor="red.400"
-                            borderRadius="sm"
-                            bg="rgba(239, 68, 68, 0.1)"
-                          >
-                            <Text
-                              position="absolute"
-                              top="-25px"
-                              left="0"
-                              color="red.400"
-                              fontSize="xs"
-                              fontWeight="bold"
-                            >
-                              ABC123
-                            </Text>
-                          </Box>
-                          
-                          {/* Detection confidence indicator */}
-                          <Box
-                            position="absolute"
-                            bottom="10px"
-                            right="10px"
-                            bg="rgba(0, 0, 0, 0.8)"
-                            color="white"
-                            px={2}
-                            py={1}
-                            borderRadius="sm"
-                            fontSize="xs"
-                          >
-                            Confidence: 87%
-                          </Box>
-                        </Box>
-                      )}
-                      
-                      {/* Connection status overlay */}
-                      <Box
-                        position="absolute"
-                        top="10px"
-                        left="10px"
-                        bg="rgba(0, 0, 0, 0.8)"
-                        color="green.400"
-                        px={2}
-                        py={1}
-                        borderRadius="sm"
-                        fontSize="xs"
+                      <img
+                        src="http://localhost:8000/video_feed"
+                        alt="Live Camera Feed"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          const fallback = document.getElementById('camera-fallback');
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                      <VStack
+                        id="camera-fallback"
+                        spacing={4}
+                        color="gray.400"
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'white', display: 'none', alignItems: 'center', justifyContent: 'center' }}
                       >
-                        <HStack spacing={1}>
-                          <Box w={2} h={2} bg="green.400" borderRadius="full" />
-                          <Text>LIVE</Text>
-                        </HStack>
-                      </Box>
-
-                      {/* Last Detection Overlay */}
-                      <Box
-                        position="absolute"
-                        top="10px"
-                        right="10px"
-                        bg="rgba(0, 0, 0, 0.8)"
-                        color="white"
-                        px={3}
-                        py={2}
-                        borderRadius="md"
-                        fontSize="sm"
-                      >
-                        <Text fontWeight="bold">Last Detection</Text>
-                        <Text>
-                          {liveFeeds.find(f => f.id === selectedFeed)?.lastDetection 
-                            ? new Date(liveFeeds.find(f => f.id === selectedFeed)!.lastDetection!).toLocaleTimeString()
-                            : 'None'
-                          }
+                        <Icon as={FiCamera} w={16} h={16} />
+                        <Text fontSize="lg" fontWeight="bold">Phone Camera Feed</Text>
+                        <Text fontSize="sm" textAlign="center">
+                          Loading camera stream...<br />
+                          Make sure IP Camera Lite is running
                         </Text>
-                      </Box>
+                        <HStack spacing={4} mt={4}>
+                          <Badge colorScheme="blue" variant="subtle">
+                            <HStack spacing={1}>
+                              <Icon as={FiWifi} w={3} h={3} />
+                              <Text>CONNECTING</Text>
+                            </HStack>
+                          </Badge>
+                        </HStack>
+                      </VStack>
                     </Box>
                   </Box>
                 )}

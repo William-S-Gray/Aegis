@@ -83,7 +83,7 @@ import {
 import api from '../api';
 
 interface User {
-  id: string;
+  _id: string;
   full_name: string;
   email: string;
   password?: string;
@@ -92,7 +92,7 @@ interface User {
 }
 
 interface Vehicle {
-  id: string;
+  _id: string;
   plate_number: string;
   make: string;
   model: string;
@@ -101,7 +101,7 @@ interface Vehicle {
 }
 
 interface Log {
-  id: string;
+  _id: string;
   plate_number: string;
   timestamp: string;
   action: string;
@@ -245,11 +245,11 @@ const AdminDashboard: React.FC = () => {
     // For now, use mock data since we don't have proper authentication set up
     // In a real app, you would get the auth token from localStorage or context
     const mockUsers = [
-      { id: '1', full_name: 'Admin User', email: 'admin@example.com', role: 'admin', is_active: true },
-      { id: '2', full_name: 'Guard User', email: 'guard@example.com', role: 'guard', is_active: true },
-      { id: '3', full_name: 'Regular User', email: 'user@example.com', role: 'user', is_active: true },
-      { id: '4', full_name: 'John Doe', email: 'john@example.com', role: 'user', is_active: true },
-      { id: '5', full_name: 'Jane Smith', email: 'jane@example.com', role: 'guard', is_active: true }
+      { _id: '507f1f77bcf86cd799439011', full_name: 'Admin User', email: 'admin@example.com', role: 'admin', is_active: true },
+      { _id: '507f1f77bcf86cd799439012', full_name: 'Guard User', email: 'guard@example.com', role: 'guard', is_active: true },
+      { _id: '507f1f77bcf86cd799439013', full_name: 'Regular User', email: 'user@example.com', role: 'user', is_active: true },
+      { _id: '507f1f77bcf86cd799439014', full_name: 'John Doe', email: 'john@example.com', role: 'user', is_active: true },
+      { _id: '507f1f77bcf86cd799439015', full_name: 'Jane Smith', email: 'jane@example.com', role: 'guard', is_active: true }
     ];
     setUsers(mockUsers);
     setAnalytics(prev => ({
@@ -303,11 +303,11 @@ const AdminDashboard: React.FC = () => {
     setLoadingVehicles(true);
     // For now, use mock data since we don't have proper authentication set up
     const mockVehicles = [
-      { id: '1', plate_number: 'ABC123', make: 'Toyota', model: 'Camry', color: 'White', owner_id: '3' },
-      { id: '2', plate_number: 'XYZ789', make: 'Honda', model: 'Civic', color: 'Blue', owner_id: '3' },
-      { id: '3', plate_number: 'DEF456', make: 'Ford', model: 'Focus', color: 'Red', owner_id: '4' },
-      { id: '4', plate_number: 'GHI789', make: 'BMW', model: 'X3', color: 'Black', owner_id: '5' },
-      { id: '5', plate_number: 'JKL012', make: 'Mercedes', model: 'C-Class', color: 'Silver', owner_id: '1' }
+      { _id: '507f1f77bcf86cd799439021', plate_number: 'ABC123', make: 'Toyota', model: 'Camry', color: 'White', owner_id: '507f1f77bcf86cd799439013' },
+      { _id: '507f1f77bcf86cd799439022', plate_number: 'XYZ789', make: 'Honda', model: 'Civic', color: 'Blue', owner_id: '507f1f77bcf86cd799439013' },
+      { _id: '507f1f77bcf86cd799439023', plate_number: 'DEF456', make: 'Ford', model: 'Focus', color: 'Red', owner_id: '507f1f77bcf86cd799439014' },
+      { _id: '507f1f77bcf86cd799439024', plate_number: 'GHI789', make: 'BMW', model: 'X3', color: 'Black', owner_id: '507f1f77bcf86cd799439015' },
+      { _id: '507f1f77bcf86cd799439025', plate_number: 'JKL012', make: 'Mercedes', model: 'C-Class', color: 'Silver', owner_id: '507f1f77bcf86cd799439011' }
     ];
     setVehicles(mockVehicles);
     setAnalytics(prev => ({
@@ -357,11 +357,11 @@ const AdminDashboard: React.FC = () => {
     setLoadingLogs(true);
     // For now, use mock data since we don't have proper authentication set up
     const mockLogs = [
-      { id: '1', plate_number: 'ABC123', timestamp: '2024-01-15T10:30:00Z', action: 'Entry', user_id: '2', vehicle_id: '1' },
-      { id: '2', plate_number: 'XYZ789', timestamp: '2024-01-15T11:45:00Z', action: 'Exit', user_id: '2', vehicle_id: '2' },
-      { id: '3', plate_number: 'DEF456', timestamp: '2024-01-15T14:20:00Z', action: 'Entry', user_id: '2', vehicle_id: '3' },
-      { id: '4', plate_number: 'GHI789', timestamp: '2024-01-15T16:15:00Z', action: 'Entry', user_id: '2', vehicle_id: '4' },
-      { id: '5', plate_number: 'JKL012', timestamp: '2024-01-15T18:30:00Z', action: 'Exit', user_id: '2', vehicle_id: '5' }
+      { _id: '507f1f77bcf86cd799439031', plate_number: 'ABC123', timestamp: '2024-01-15T10:30:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439021' },
+      { _id: '507f1f77bcf86cd799439032', plate_number: 'XYZ789', timestamp: '2024-01-15T11:45:00Z', action: 'Exit', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439022' },
+      { _id: '507f1f77bcf86cd799439033', plate_number: 'DEF456', timestamp: '2024-01-15T14:20:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439023' },
+      { _id: '507f1f77bcf86cd799439034', plate_number: 'GHI789', timestamp: '2024-01-15T16:15:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439024' },
+      { _id: '507f1f77bcf86cd799439035', plate_number: 'JKL012', timestamp: '2024-01-15T18:30:00Z', action: 'Exit', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439025' }
     ];
     setLogs(mockLogs);
     setAnalytics(prev => ({
@@ -418,13 +418,13 @@ const AdminDashboard: React.FC = () => {
   // User CRUD
   const handleUserFormChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setUserForm({ ...userForm, [e.target.name]: e.target.value });
   const openEditUser = (user: User) => { setEditingUser(user); setUserForm(user); onOpen(); };
-  const openCreateUser = () => { setEditingUser(null); setUserForm({ full_name: '', email: '', password: '', role: 'guard' }); onOpen(); };
+  const openCreateUser = () => { setEditingUser(null); setUserForm({ _id: '', full_name: '', email: '', password: '', role: 'guard' }); onOpen(); };
   const handleUserSubmit = async () => {
     try {
       if (editingUser) {
         // Mock update - in real app, this would be an API call
-        const updatedUsers = users.map(u => 
-          u.id === editingUser.id 
+                const updatedUsers = users.map(u =>
+          u._id === editingUser._id 
             ? { ...u, ...userForm }
             : u
         );
@@ -433,7 +433,7 @@ const AdminDashboard: React.FC = () => {
       } else {
         // Mock create - in real app, this would be an API call
         const newUser = {
-          id: (users.length + 1).toString(),
+          _id: (users.length + 1).toString(),
           ...userForm,
           is_active: true
         };
@@ -449,7 +449,7 @@ const AdminDashboard: React.FC = () => {
     try {
       // Mock deactivate - in real app, this would be an API call
       const updatedUsers = users.map(u => 
-        u.id === id 
+        u._id === id 
           ? { ...u, is_active: false }
           : u
       );
@@ -463,14 +463,14 @@ const AdminDashboard: React.FC = () => {
   // Vehicle CRUD
   const handleVehicleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => setVehicleForm({ ...vehicleForm, [e.target.name]: e.target.value });
   const openEditVehicle = (v: Vehicle) => { setEditingVehicle(v); setVehicleForm(v); onVehicleOpen(); };
-  const openCreateVehicle = () => { setEditingVehicle(null); setVehicleForm({ plate_number: '', make: '', model: '', color: '', owner_id: '' }); onVehicleOpen(); };
+  const openCreateVehicle = () => { setEditingVehicle(null); setVehicleForm({ _id: '', plate_number: '', make: '', model: '', color: '', owner_id: '' }); onVehicleOpen(); };
   
   const handleVehicleSubmit = async () => {
     try {
       if (editingVehicle) {
         // Mock update - in real app, this would be an API call
         const updatedVehicles = vehicles.map(v => 
-          v.id === editingVehicle.id 
+          v._id === editingVehicle._id 
             ? { ...v, ...vehicleForm }
             : v
         );
@@ -479,7 +479,7 @@ const AdminDashboard: React.FC = () => {
       } else {
         // Mock create - in real app, this would be an API call
         const newVehicle = {
-          id: (vehicles.length + 1).toString(),
+          _id: (vehicles.length + 1).toString(),
           ...vehicleForm
         };
         setVehicles([...vehicles, newVehicle]);
@@ -494,7 +494,7 @@ const AdminDashboard: React.FC = () => {
   const handleVehicleDelete = async (id: string) => {
     try {
       // Mock delete - in real app, this would be an API call
-      const updatedVehicles = vehicles.filter(v => v.id !== id);
+      const updatedVehicles = vehicles.filter(v => v._id !== id);
       setVehicles(updatedVehicles);
       toast({ title: 'Vehicle deleted successfully', status: 'success' });
     } catch (error) {
@@ -1186,7 +1186,7 @@ const AdminDashboard: React.FC = () => {
                   </Thead>
                   <Tbody>
                     {users.map(u => (
-                      <Tr key={u.id}>
+                      <Tr key={u._id}>
                         <Td fontWeight="medium">{u.full_name}</Td>
                         <Td>{u.email}</Td>
                         <Td>
@@ -1203,7 +1203,7 @@ const AdminDashboard: React.FC = () => {
                           <HStack spacing={2}>
                             <Button size="xs" onClick={() => openEditUser(u)}>Edit</Button>
                             {u.is_active && (
-                              <Button size="xs" colorScheme="red" onClick={() => handleUserDeactivate(u.id)}>
+                              <Button size="xs" colorScheme="red" onClick={() => handleUserDeactivate(u._id)}>
                                 Deactivate
                               </Button>
                             )}
@@ -1246,7 +1246,7 @@ const AdminDashboard: React.FC = () => {
                   </Thead>
                   <Tbody>
                     {vehicles.map(v => (
-                      <Tr key={v.id}>
+                      <Tr key={v._id}>
                         <Td fontWeight="bold">{v.plate_number}</Td>
                         <Td>{v.make}</Td>
                         <Td>{v.model}</Td>
@@ -1260,7 +1260,7 @@ const AdminDashboard: React.FC = () => {
                         <Td>
                           <HStack spacing={2}>
                             <Button size="xs" onClick={() => openEditVehicle(v)}>Edit</Button>
-                            <Button size="xs" colorScheme="red" onClick={() => handleVehicleDelete(v.id)}>
+                            <Button size="xs" colorScheme="red" onClick={() => handleVehicleDelete(v._id)}>
                               Delete
                             </Button>
                           </HStack>
@@ -1301,7 +1301,7 @@ const AdminDashboard: React.FC = () => {
                   </Thead>
                   <Tbody>
                     {logs.map(log => (
-                      <Tr key={log.id}>
+                      <Tr key={log._id}>
                         <Td fontWeight="bold">{log.plate_number}</Td>
                         <Td>
                           <Badge colorScheme={log.action === 'Entry' ? 'green' : 'red'} variant="subtle">

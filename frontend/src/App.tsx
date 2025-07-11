@@ -1,9 +1,11 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import GuardDashboard from './pages/GuardDashboard';
+import AdminAnalytics from "./pages/AdminAnalytics";
+import GuardAlertHistory from "./pages/GuardAlertHistory";
 
 // Lazy load components
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
@@ -182,6 +184,10 @@ function App() {
       <AuthProvider>
         <Router>
           <Navbar />
+          <nav style={{ padding: 16, background: "#f7fafc" }}>
+            <Link to="/analytics" style={{ marginRight: 16 }}>Analytics</Link>
+            <Link to="/alert-history">Alert History</Link>
+          </nav>
           <Suspense fallback={<div>Loading...</div>}>
             <Routes>
               <Route path="/" element={<Home />} />
@@ -201,6 +207,8 @@ function App() {
                   <UserPortal />
                 </ProtectedRoute>
               } />
+              <Route path="/analytics" element={<AdminAnalytics />} />
+              <Route path="/alert-history" element={<GuardAlertHistory />} />
             </Routes>
           </Suspense>
         </Router>

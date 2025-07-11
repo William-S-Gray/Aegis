@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 interface User {
-  id: string;
+  _id: string;
   email: string;
   role: string;
 }
@@ -16,9 +16,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Demo credentials for testing
 const DEMO_USERS = {
-  'admin@aegis.com': { password: 'admin123', role: 'admin', id: '1' },
-  'guard@aegis.com': { password: 'guard123', role: 'guard', id: '2' },
-  'user@aegis.com': { password: 'user123', role: 'user', id: '3' },
+  'admin@aegis.com': { password: 'admin123', role: 'admin', _id: '507f1f77bcf86cd799439011' },
+  'guard@aegis.com': { password: 'guard123', role: 'guard', _id: '507f1f77bcf86cd799439012' },
+  'user@aegis.com': { password: 'user123', role: 'user', _id: '507f1f77bcf86cd799439013' },
 };
 
 export const useAuth = () => {
@@ -38,7 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     if (demoUser && demoUser.password === password) {
       const userData = { 
-        id: demoUser.id, 
+        _id: demoUser._id, 
         email, 
         role: demoUser.role 
       };
@@ -47,7 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('user', JSON.stringify(userData));
     } else {
       // Fallback: accept any credentials and assign admin role
-      const userData = { id: '1', email, role: 'admin' };
+      const userData = { _id: '507f1f77bcf86cd799439011', email, role: 'admin' };
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
     }

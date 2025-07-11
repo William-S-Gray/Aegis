@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { FiTruck, FiClock, FiMapPin, FiUser, FiShield, FiCalendar } from 'react-icons/fi';
 
 interface Vehicle {
-  id: string;
+  _id: string;
   plate_number: string;
   make: string;
   model: string;
@@ -19,7 +19,7 @@ interface Vehicle {
 }
 
 interface AccessLog {
-  id: string;
+  _id: string;
   plate_number: string;
   timestamp: string;
   action: string;
@@ -53,14 +53,14 @@ const UserPortal: React.FC = () => {
     setTimeout(() => {
       // Mock data for demonstration
       const mockVehicles = [
-        { id: '1', plate_number: 'ABC123', make: 'Toyota', model: 'Camry', color: 'White', owner_id: user?.id || '3' },
-        { id: '2', plate_number: 'XYZ789', make: 'Honda', model: 'Civic', color: 'Blue', owner_id: user?.id || '3' }
+              { _id: '507f1f77bcf86cd799439021', plate_number: 'ABC123', make: 'Toyota', model: 'Camry', color: 'White', owner_id: user?._id || '507f1f77bcf86cd799439013' },
+      { _id: '507f1f77bcf86cd799439022', plate_number: 'XYZ789', make: 'Honda', model: 'Civic', color: 'Blue', owner_id: user?._id || '507f1f77bcf86cd799439013' }
       ];
       
       const mockLogs = [
-        { id: '1', plate_number: 'ABC123', timestamp: '2024-01-15T10:30:00Z', action: 'Entry', user_id: '2', vehicle_id: '1' },
-        { id: '2', plate_number: 'ABC123', timestamp: '2024-01-15T18:45:00Z', action: 'Exit', user_id: '2', vehicle_id: '1' },
-        { id: '3', plate_number: 'XYZ789', timestamp: '2024-01-14T09:15:00Z', action: 'Entry', user_id: '2', vehicle_id: '2' }
+        { _id: '507f1f77bcf86cd799439031', plate_number: 'ABC123', timestamp: '2024-01-15T10:30:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439021' },
+        { _id: '507f1f77bcf86cd799439032', plate_number: 'ABC123', timestamp: '2024-01-15T18:45:00Z', action: 'Exit', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439021' },
+        { _id: '507f1f77bcf86cd799439033', plate_number: 'XYZ789', timestamp: '2024-01-14T09:15:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439022' }
       ];
 
       setVehicles(mockVehicles);
@@ -208,7 +208,7 @@ const UserPortal: React.FC = () => {
               <VStack spacing={4} align="stretch">
                 {vehicles.map((vehicle) => (
                   <Card 
-                    key={vehicle.id} 
+                    key={vehicle._id} 
                     variant="outline" 
                     cursor="pointer"
                     _hover={{ bg: 'gray.50' }}
@@ -260,7 +260,7 @@ const UserPortal: React.FC = () => {
               <VStack spacing={3} align="stretch">
                 {accessLogs.slice(0, 5).map((log) => (
                   <Flex 
-                    key={log.id} 
+                    key={log._id} 
                     justify="space-between" 
                     align="center" 
                     p={3} 
