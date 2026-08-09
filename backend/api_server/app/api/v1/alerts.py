@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core import audit, metrics
-from app.core.deps import require_guard
+from app.core.deps import require_alert_publisher, require_guard
 from app.core.ws_manager import manager
 from app.database import get_db
 from app.models import (
@@ -256,7 +256,7 @@ def create_alert(
     payload: AlertCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_guard),
+    current_user: User = Depends(require_alert_publisher),
 ) -> Alert:
     """
     Raise an alert from a detection.

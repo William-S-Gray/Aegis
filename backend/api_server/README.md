@@ -108,6 +108,19 @@ def list_users(current_user: User = Depends(require_admin)):
     ...
 ```
 
+## Roles
+
+| Role | May do |
+|---|---|
+| `admin` | Everything: users, vehicles, sites, rules, analytics |
+| `guard` | Alerts, review queue, access decisions, the alert stream |
+| `user` | Read only their own vehicles and access history |
+| `service` | **Publish detections and nothing else** — for the vision service |
+
+`service` is deliberately the narrowest role and has its own dependency
+(`require_alert_publisher`) rather than being added to `require_guard`, so
+widening it later has to be a conscious edit.
+
 ## Before production
 
 - Set a real `SECRET_KEY`; the app refuses to boot without one when

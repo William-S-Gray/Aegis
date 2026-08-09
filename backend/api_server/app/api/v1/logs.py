@@ -1,35 +1,48 @@
 from datetime import datetime, timezone
 
+import math
+
 from fastapi import APIRouter, Depends, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import audit
-from app.core.deps import get_current_user, require_guard
+from app.core.deps import require_any_user, require_guard
 from app.database import get_db
 from app.models import AccessLog, Role, User, Vehicle, normalize_plate
-from app.schemas import AccessLogCreate, AccessLogPublic
+from app.schemas import AccessLogCreate, AccessLogPage, AccessLogPublic
 
 router = APIRouter(tags=["access-logs"])
 
 
-@router.get("/logs", response_model=list[AccessLogPublic])
+@router.get("/logs", response_model=AccessLogPage)
 def list_logs(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    limit: int = Query(default=200, ge=1, le=1000),
-) -> list[AccessLog]:
+    current_user: User = Depends(require_any_user),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> AccessLogPage:
     """
-    Access history. A plain user sees only entries for vehicles they own.
+    Access history, newest first. A plain user sees only entries for vehicles
+    they own.
     """
-    query = select(AccessLog).order_by(AccessLog.timestamp.desc()).limit(limit)
-
+    filters = []
     if current_user.role == Role.USER:
         owned = select(Vehicle.plate_number).where(Vehicle.owner_id == current_user.id)
-        query = query.where(AccessLog.plate_number.in_(owned))
+        filters.append(AccessLog.plate_number.in_(owned))
 
-    logs = list(db.scalars(query).all())
+    total = db.scalar(select(func.count()).select_from(AccessLog).where(*filters)) or 0
+
+    logs = list(
+        db.scalars(
+            select(AccessLog)
+            .where(*filters)
+            .order_by(AccessLog.timestamp.desc())
+            .offset((page - 1) * limit)
+            .limit(limit)
+        ).all()
+    )
 
     # Reading plate history is itself a privacy-relevant event.
     audit.record(
@@ -42,7 +55,13 @@ def list_logs(
         details={"returned": len(logs), "scope": current_user.role.value},
     )
     db.commit()
-    return logs
+
+    return AccessLogPage(
+        logs=[AccessLogPublic.model_validate(entry) for entry in logs],
+        total=total,
+        page=page,
+        total_pages=max(1, math.ceil(total / limit)),
+    )
 
 
 @router.post(

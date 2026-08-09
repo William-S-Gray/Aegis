@@ -12,6 +12,12 @@ class Role(str, enum.Enum):
     ADMIN = "admin"
     GUARD = "guard"
     USER = "user"
+    # Non-human account for the vision service. Deliberately the narrowest
+    # role in the system: it may publish detections and nothing else, so a
+    # compromised camera host cannot read the register, confirm plates, or
+    # record an access decision. Camera hosts sit at the edge of the network
+    # and are often physically reachable, which makes them a likely entry point.
+    SERVICE = "service"
 
 
 def _utcnow() -> datetime:

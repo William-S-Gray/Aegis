@@ -8,7 +8,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
-import { asArray } from '../utils/safe';
+import { asArray, asObject, asNumber } from '../utils/safe';
 import { FiTruck, FiClock, FiShield, FiCalendar } from 'react-icons/fi';
 
 interface Vehicle {
@@ -56,13 +56,17 @@ const UserPortal: React.FC = () => {
     // Both endpoints scope their results to the caller server-side, so a user
     // only ever receives their own vehicles and access history.
     Promise.all([
-      api.get('/vehicles').catch(() => ({ data: [] })),
-      api.get('/logs').catch(() => ({ data: [] })),
+      api.get('/vehicles').catch(() => ({ data: {} })),
+      api.get('/logs').catch(() => ({ data: {} })),
     ])
       .then(([vehicleRes, logRes]) => {
         if (cancelled) return;
-        const ownVehicles = asArray<Vehicle>(vehicleRes.data);
-        const logs = asArray<AccessLog>(logRes.data);
+        // Both endpoints return a paginated envelope.
+        const ownVehicles = asArray<Vehicle>(
+          asObject<{ vehicles: Vehicle[] }>(vehicleRes.data).vehicles
+        );
+        const logPayload = asObject<{ logs: AccessLog[]; total: number }>(logRes.data);
+        const logs = asArray<AccessLog>(logPayload.logs);
 
         setVehicles(ownVehicles);
         setAccessLogs(logs);
@@ -78,7 +82,7 @@ const UserPortal: React.FC = () => {
 
         setStats({
           totalVehicles: ownVehicles.length,
-          totalAccesses: logs.length,
+          totalAccesses: asNumber(logPayload.total, logs.length),
           thisMonth,
           lastAccess: logs.length
             ? new Date(logs[0].timestamp).toLocaleDateString()

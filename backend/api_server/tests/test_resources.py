@@ -82,6 +82,72 @@ class TestAuthorization:
         )
 
 
+class TestServiceAccountConfinement:
+    """
+    The vision service runs on a camera host — the most physically reachable
+    and least trusted machine in a deployment. Its account may publish
+    detections and nothing else, so compromising that host does not yield a
+    guard's access to the register or the ability to record a gate decision.
+    """
+
+    def _service_headers(self, client, make_user):
+        make_user(email="vision@aegis.example", password=PASSWORD, role=Role.SERVICE)
+        token = client.post(
+            "/api/v1/auth/login",
+            json={"email": "vision@aegis.example", "password": PASSWORD},
+        ).json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_service_account_can_publish_a_detection(self, client, make_user):
+        headers = self._service_headers(client, make_user)
+
+        response = client.post(
+            "/api/v1/alerts",
+            headers=headers,
+            json={"plate_number": "SVC001", "plate_confidence": 0.95},
+        )
+        assert response.status_code == 201
+
+    def test_service_account_cannot_read_the_vehicle_register(self, client, make_user):
+        headers = self._service_headers(client, make_user)
+        assert client.get("/api/v1/vehicles", headers=headers).status_code == 403
+
+    def test_service_account_cannot_read_the_user_roster(self, client, make_user):
+        headers = self._service_headers(client, make_user)
+        assert client.get("/api/v1/users", headers=headers).status_code == 403
+
+    def test_service_account_cannot_record_an_access_decision(self, client, make_user):
+        """A camera must never be able to say a vehicle was let through."""
+        headers = self._service_headers(client, make_user)
+
+        response = client.post(
+            "/api/v1/access-logs",
+            headers=headers,
+            json={"plate_number": "SVC001", "action": "approve"},
+        )
+        assert response.status_code == 403
+
+    def test_service_account_cannot_list_or_review_alerts(self, client, make_user):
+        headers = self._service_headers(client, make_user)
+
+        assert client.get("/api/v1/alerts", headers=headers).status_code == 403
+        assert client.get("/api/v1/alerts/review-queue", headers=headers).status_code == 403
+
+    def test_service_account_cannot_open_the_alert_stream(self, client, make_user):
+        headers = self._service_headers(client, make_user)
+        assert client.post("/api/v1/auth/ws-ticket", headers=headers).status_code == 403
+
+    def test_service_account_cannot_reach_analytics_or_rules(self, client, make_user):
+        headers = self._service_headers(client, make_user)
+
+        assert (
+            client.get("/api/v1/analytics/mismatches", headers=headers).status_code == 403
+        )
+        assert (
+            client.get("/api/v1/attribute-mismatch-rules", headers=headers).status_code == 403
+        )
+
+
 class TestUsers:
     def test_admin_can_create_and_list(self, client, auth):
         headers = auth(Role.ADMIN)
@@ -199,7 +265,8 @@ class TestVehicles:
         }
 
         visible = client.get("/api/v1/vehicles", headers=owner_headers).json()
-        assert [v["plate_number"] for v in visible] == ["MINE1"]
+        assert [v["plate_number"] for v in visible["vehicles"]] == ["MINE1"]
+        assert visible["total"] == 1
 
     def test_guard_sees_every_vehicle(self, client, auth):
         admin = auth(Role.ADMIN)
@@ -208,7 +275,7 @@ class TestVehicles:
 
         guard = auth(Role.GUARD)
         visible = client.get("/api/v1/vehicles", headers=guard).json()
-        assert len(visible) == 2
+        assert visible["total"] == 2
 
     def test_reading_vehicles_is_audited(self, client, auth, db):
         headers = auth(Role.ADMIN)
@@ -216,6 +283,115 @@ class TestVehicles:
 
         actions = set(db.scalars(select(AuditLog.action)).all())
         assert "vehicle.list" in actions
+
+
+class TestVehiclePagination:
+    """
+    The unpaginated endpoint returned every row — a megabyte of JSON at 5 000
+    vehicles, measured. No operator reads that and every browser must parse it.
+    """
+
+    def _create_many(self, client, headers, count):
+        for i in range(count):
+            client.post(
+                "/api/v1/vehicles", headers=headers, json={"plate_number": f"PG{i:04d}"}
+            )
+
+    def test_page_size_is_bounded(self, client, auth):
+        headers = auth(Role.ADMIN)
+        self._create_many(client, headers, 12)
+
+        page = client.get("/api/v1/vehicles?limit=5", headers=headers).json()
+
+        assert len(page["vehicles"]) == 5
+        assert page["total"] == 12
+        assert page["total_pages"] == 3
+
+    def test_second_page_returns_different_rows(self, client, auth):
+        headers = auth(Role.ADMIN)
+        self._create_many(client, headers, 12)
+
+        first = client.get("/api/v1/vehicles?page=1&limit=5", headers=headers).json()
+        second = client.get("/api/v1/vehicles?page=2&limit=5", headers=headers).json()
+
+        assert {v["id"] for v in first["vehicles"]}.isdisjoint(
+            {v["id"] for v in second["vehicles"]}
+        )
+
+    def test_limit_is_capped(self, client, auth):
+        """An unbounded limit re-creates the problem pagination solves."""
+        headers = auth(Role.ADMIN)
+        assert client.get("/api/v1/vehicles?limit=9999", headers=headers).status_code == 422
+
+    def test_search_narrows_by_plate(self, client, auth):
+        headers = auth(Role.ADMIN)
+        client.post("/api/v1/vehicles", headers=headers, json={"plate_number": "FINDME1"})
+        self._create_many(client, headers, 5)
+
+        page = client.get("/api/v1/vehicles?search=findme", headers=headers).json()
+
+        assert page["total"] == 1
+        assert page["vehicles"][0]["plate_number"] == "FINDME1"
+
+    def test_search_normalises_the_needle(self, client, auth):
+        headers = auth(Role.ADMIN)
+        client.post("/api/v1/vehicles", headers=headers, json={"plate_number": "AB12CD"})
+
+        page = client.get("/api/v1/vehicles?search=ab-12", headers=headers).json()
+        assert page["total"] == 1
+
+    def test_search_respects_role_scoping(self, client, auth, make_user):
+        """Search must not become a way around the per-user scope."""
+        admin = auth(Role.ADMIN)
+        owner = make_user(email="scoped@aegis.example", password=PASSWORD, role=Role.USER)
+        client.post(
+            "/api/v1/vehicles",
+            headers=admin,
+            json={"plate_number": "MINE99", "owner_id": str(owner.id)},
+        )
+        client.post("/api/v1/vehicles", headers=admin, json={"plate_number": "THEIRS99"})
+
+        token = client.post(
+            "/api/v1/auth/login",
+            json={"email": "scoped@aegis.example", "password": PASSWORD},
+        ).json()["access_token"]
+
+        page = client.get(
+            "/api/v1/vehicles?search=99", headers={"Authorization": f"Bearer {token}"}
+        ).json()
+
+        assert page["total"] == 1
+        assert page["vehicles"][0]["plate_number"] == "MINE99"
+
+
+class TestAccessLogPagination:
+    def test_logs_are_paginated(self, client, auth):
+        headers = auth(Role.GUARD)
+        for i in range(8):
+            client.post(
+                "/api/v1/access-logs",
+                headers=headers,
+                json={"plate_number": f"LOG{i:03d}", "action": "entry"},
+            )
+
+        page = client.get("/api/v1/logs?limit=3", headers=headers).json()
+
+        assert len(page["logs"]) == 3
+        assert page["total"] == 8
+        assert page["total_pages"] == 3
+
+    def test_logs_are_newest_first(self, client, auth):
+        headers = auth(Role.GUARD)
+        for i in range(3):
+            client.post(
+                "/api/v1/access-logs",
+                headers=headers,
+                json={"plate_number": f"ORD{i:03d}", "action": "entry"},
+            )
+
+        logs = client.get("/api/v1/logs", headers=headers).json()["logs"]
+        timestamps = [entry["timestamp"] for entry in logs]
+        assert timestamps == sorted(timestamps, reverse=True)
 
 
 class TestAccessLogs:

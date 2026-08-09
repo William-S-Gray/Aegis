@@ -124,13 +124,20 @@ python -m app.cli export-subject --plate AB12CD    # access request
 python -m app.cli erase-subject --plate AB12CD --confirm AB12CD
 ```
 
+## Compliance
+
+A drafted DPIA and data map — what personal data the system holds, where it
+flows, how long it is kept, and how each risk is controlled — is in
+[docs/dpia.md](docs/dpia.md). It is a draft for a DPO to complete; the sections
+marked **DECISION** are not engineering questions.
+
 ## Before charging a customer
 
 1. **A real detection model.** The long pole. Budget for accuracy work on the
    customer's own footage.
-2. **Legal basis and DPIA.** Plate data is personal data under GDPR and many
-   US state laws. The retention defaults and erasure tooling exist, but the
-   periods and lawful basis are decisions only you and a DPO can make.
+2. **Complete the DPIA** in [docs/dpia.md](docs/dpia.md). It is mandatory here
+   under Art 35(3)(c), not optional — the draft records what the system does
+   and which risks are already controlled; a DPO settles the rest.
 3. **Point the monitoring stack at production** and decide who gets paged.
    The rules and dashboard ship in `monitoring/`; routing alerts to a human is
    a decision only you can make.

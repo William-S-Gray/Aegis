@@ -66,7 +66,7 @@ import {
 } from 'react-icons/fi';
 import api from '../api';
 import { mockAuthEnabled } from '../config';
-import { asArray, apiMessage } from '../utils/safe';
+import { asArray, asObject, asNumber, apiMessage } from '../utils/safe';
 
 interface User {
   id: string;
@@ -274,12 +274,17 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setLoadingVehicles(true);
-    api.get('/vehicles')
+    // Paginated: the endpoint no longer returns the whole register.
+    api.get('/vehicles', { params: { limit: 200 } })
       .then((res) => {
         if (cancelled) return;
-        const vehicleData = asArray<Vehicle>(res.data);
+        const vehicleData = asArray<Vehicle>(asObject<{ vehicles: Vehicle[] }>(res.data).vehicles);
         setVehicles(vehicleData);
-        setAnalytics(prev => ({ ...prev, totalVehicles: vehicleData.length }));
+        // Use the server's total, not the page length, or the tile under-reports.
+        setAnalytics(prev => ({
+          ...prev,
+          totalVehicles: asNumber(asObject<{ total: number }>(res.data).total, vehicleData.length),
+        }));
       })
       .catch((err: Error) => {
         if (cancelled) return;
@@ -296,14 +301,15 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setLoadingLogs(true);
-    api.get('/logs')
+    api.get('/logs', { params: { limit: 200 } })
       .then((res) => {
         if (cancelled) return;
-        const logData = asArray<Log>(res.data);
+        const payload = asObject<{ logs: Log[]; total: number }>(res.data);
+        const logData = asArray<Log>(payload.logs);
         setLogs(logData);
         setAnalytics(prev => ({
           ...prev,
-          totalLogs: logData.length,
+          totalLogs: asNumber(payload.total, logData.length),
           monthlyAlerts: logData.filter(log => {
             const logDate = new Date(log.timestamp);
             const now = new Date();

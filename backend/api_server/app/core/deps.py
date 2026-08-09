@@ -73,6 +73,11 @@ require_admin = require_roles(Role.ADMIN)
 require_guard = require_roles(Role.ADMIN, Role.GUARD)
 require_any_user = require_roles(Role.ADMIN, Role.GUARD, Role.USER)
 
+# Publishing a detection is the ONLY thing a service account may do. This is
+# deliberately a separate alias rather than adding SERVICE to require_guard,
+# so widening it later has to be a conscious edit.
+require_alert_publisher = require_roles(Role.ADMIN, Role.GUARD, Role.SERVICE)
+
 
 def client_ip(request: Request) -> str | None:
     """

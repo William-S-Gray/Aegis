@@ -46,6 +46,21 @@ class VehiclePublic(BaseModel):
     is_active: bool
 
 
+class VehiclePage(BaseModel):
+    """
+    Paginated vehicles.
+
+    The unpaginated version returned every row: a 1 MB response at 5 000
+    vehicles, and proportionally worse at a real site. No operator reads five
+    thousand rows, and the browser has to parse all of them.
+    """
+
+    vehicles: list[VehiclePublic]
+    total: int
+    page: int
+    total_pages: int
+
+
 class VehicleCreate(BaseModel):
     plate_number: str = Field(min_length=1, max_length=32)
     make: str | None = Field(default=None, max_length=80)
@@ -90,6 +105,13 @@ class AccessLogCreate(BaseModel):
     timestamp: datetime | None = None
     site_id: uuid.UUID | None = None
     details: dict | None = None
+
+
+class AccessLogPage(BaseModel):
+    logs: list[AccessLogPublic]
+    total: int
+    page: int
+    total_pages: int
 
 
 # ------------------------------------------------------------- comments

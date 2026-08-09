@@ -1,33 +1,57 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+import math
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import audit
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import require_admin, require_any_user
 from app.database import get_db
 from app.models import Role, User, Vehicle, normalize_plate
-from app.schemas import VehicleCreate, VehiclePublic, VehicleUpdate
+from app.schemas import VehicleCreate, VehiclePage, VehiclePublic, VehicleUpdate
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
-@router.get("", response_model=list[VehiclePublic])
+@router.get("", response_model=VehiclePage)
 def list_vehicles(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> list[Vehicle]:
+    current_user: User = Depends(require_any_user),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    search: str | None = Query(default=None, description="Partial plate match"),
+) -> VehiclePage:
     """
     Plate data is personal data, so the result set is scoped by role rather
     than merely gated: a plain user sees only vehicles they own.
-    """
-    query = select(Vehicle).order_by(Vehicle.plate_display)
-    if current_user.role == Role.USER:
-        query = query.where(Vehicle.owner_id == current_user.id)
 
-    vehicles = list(db.scalars(query).all())
+    Paginated. The unpaginated version returned every row — a megabyte of JSON
+    at 5 000 vehicles, which no operator reads and every browser must parse.
+    `search` exists so the admin UI can find one plate without loading the
+    whole register.
+    """
+    filters = []
+    if current_user.role == Role.USER:
+        filters.append(Vehicle.owner_id == current_user.id)
+    if search:
+        needle = normalize_plate(search)
+        if needle:
+            filters.append(Vehicle.plate_number.like(f"%{needle}%"))
+
+    total = db.scalar(select(func.count()).select_from(Vehicle).where(*filters)) or 0
+
+    vehicles = list(
+        db.scalars(
+            select(Vehicle)
+            .where(*filters)
+            .order_by(Vehicle.plate_display)
+            .offset((page - 1) * limit)
+            .limit(limit)
+        ).all()
+    )
 
     audit.record(
         db,
@@ -39,7 +63,13 @@ def list_vehicles(
         details={"returned": len(vehicles), "scope": current_user.role.value},
     )
     db.commit()
-    return vehicles
+
+    return VehiclePage(
+        vehicles=[VehiclePublic.model_validate(v) for v in vehicles],
+        total=total,
+        page=page,
+        total_pages=max(1, math.ceil(total / limit)),
+    )
 
 
 @router.post("", response_model=VehiclePublic, status_code=status.HTTP_201_CREATED)

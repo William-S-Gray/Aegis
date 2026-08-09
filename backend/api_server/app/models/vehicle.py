@@ -50,4 +50,6 @@ class Vehicle(Base):
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
 
-    owner = relationship("User", lazy="joined")
+    # Lazy on purpose. VehiclePublic exposes owner_id, not the owner object,
+    # so an eager join would hydrate a User per vehicle for nothing.
+    owner = relationship("User", lazy="select")

@@ -37,7 +37,7 @@ cp .env.example .env      # set VISION_SERVICE_PASSWORD
 
 # Create the service account against a running API:
 #   cd ../api_server && .venv/bin/python -m app.cli create-user \
-#     --email vision@aegis.example --name "Vision Service" --role guard
+#     --email vision@aegis.example --name "Vision Service" --role service
 
 .venv/bin/python -m app.main
 ```
@@ -113,7 +113,11 @@ A car waiting at a barrier appears in every frame. `VISION_DEDUPE_WINDOW_SECONDS
 
 - Replace the stub; the service refuses to run with it outside development.
 - Point `VISION_SOURCES` at RTSP/MJPEG cameras rather than a directory.
-- Give the service account the guard role and nothing more.
+- Give the service account the **`service` role**, never `guard`. A service
+  account may publish detections and nothing else — it cannot read the vehicle
+  register, list alerts, confirm plates, or record an access decision. Camera
+  hosts sit at the network edge and are often physically reachable, so this is
+  the account most likely to be compromised.
 - Run one process per camera, or add a worker pool — the loop is currently
   sequential across sources.
 - Build a labelled evaluation set and measure before/after on every model

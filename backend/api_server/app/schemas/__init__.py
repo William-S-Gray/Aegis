@@ -1,6 +1,7 @@
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
 from app.schemas.resources import (
     AccessLogCreate,
+    AccessLogPage,
     AccessLogPublic,
     AlertAssign,
     AlertCommentCreate,
@@ -21,6 +22,7 @@ from app.schemas.resources import (
     SiteCreate,
     SitePublic,
     VehicleCreate,
+    VehiclePage,
     VehiclePublic,
     VehicleUpdate,
 )
@@ -28,6 +30,7 @@ from app.schemas.user import UserCreate, UserPublic, UserUpdate
 
 __all__ = [
     "AccessLogCreate",
+    "AccessLogPage",
     "AccessLogPublic",
     "AlertAssign",
     "AlertCommentCreate",
@@ -54,6 +57,7 @@ __all__ = [
     "UserPublic",
     "UserUpdate",
     "VehicleCreate",
+    "VehiclePage",
     "VehiclePublic",
     "VehicleUpdate",
 ]
