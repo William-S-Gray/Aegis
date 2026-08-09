@@ -1,10 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Select, Button, HStack, Spinner, Checkbox, CheckboxGroup, useToast, Input, Textarea, Menu, MenuButton, MenuList, MenuItem } from "@chakra-ui/react";
-import axios from "axios";
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
-
+import { Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Select, Button, HStack, Spinner, Checkbox, CheckboxGroup, useToast, Textarea, Menu, MenuButton, MenuList, MenuItem } from "@chakra-ui/react";
+import api from "../api";
+import { asArray, asObject, asNumber } from "../utils/safe";
+import { exportCSV, exportExcel, exportPDF, formatDate } from "../utils/exporters";
 const ALL_COLUMNS = [
   { key: "plate_number", label: "Plate" },
   { key: "detected_type", label: "Type" },
@@ -13,49 +11,6 @@ const ALL_COLUMNS = [
   { key: "feedback_status", label: "Feedback" },
   { key: "timestamp", label: "Time" }
 ];
-
-function exportCSV(data, filename, columns, dateFormat) {
-  const header = columns.map(c => c.label).join(",");
-  const rows = data.map(row => columns.map(c => c.key === "timestamp" ? formatDate(row[c.key], dateFormat) : row[c.key]).join(","));
-  const csv = [header].concat(rows).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  window.URL.revokeObjectURL(url);
-}
-
-function exportExcel(data, filename, columns, dateFormat) {
-  const rows = data.map(row => {
-    const obj = {};
-    columns.forEach(c => {
-      obj[c.label] = c.key === "timestamp" ? formatDate(row[c.key], dateFormat) : row[c.key];
-    });
-    return obj;
-  });
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Alerts");
-  XLSX.writeFile(wb, filename);
-}
-
-function exportPDF(data, filename, columns, dateFormat) {
-  const doc = new jsPDF();
-  doc.autoTable({
-    head: [columns.map(c => c.label)],
-    body: data.map(a => columns.map(c => c.key === "timestamp" ? formatDate(a[c.key], dateFormat) : a[c.key]))
-  });
-  doc.save(filename);
-}
-
-function formatDate(date, format) {
-  const d = new Date(date);
-  if (format === "date") return d.toLocaleDateString();
-  if (format === "time") return d.toLocaleTimeString();
-  return d.toLocaleString();
-}
 
 export default function GuardAlertHistory() {
   const [alerts, setAlerts] = useState([]);
@@ -67,19 +22,24 @@ export default function GuardAlertHistory() {
   const [selectedColumns, setSelectedColumns] = useState(ALL_COLUMNS.map(c => c.key));
   const [dateFormat, setDateFormat] = useState("datetime");
   const [users, setUsers] = useState([]);
-  const [comment, setComment] = useState("");
-  const loader = useRef();
+  // Keyed by alert id: a single shared draft leaked one row's text into every row.
+  const [commentDrafts, setCommentDrafts] = useState({});
   const toast = useToast();
 
   const fetchAlerts = async (pageNum = 1, append = false) => {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get("/api/v1/alerts", { params: { page: pageNum, limit: 20 } });
-      setAlerts(prev => append ? [...prev, ...res.data.alerts] : res.data.alerts);
-      setTotalPages(res.data.total_pages);
+      const params = { page: pageNum, limit: 20 };
+      if (filter) params.feedback_status = filter;
+      const res = await api.get("/alerts", { params });
+      const payload = asObject(res.data);
+      const incoming = asArray(payload.alerts);
+      setAlerts(prev => (append ? [...prev, ...incoming] : incoming));
+      setTotalPages(Math.max(1, asNumber(payload.total_pages, 1)));
     } catch (err) {
-      setError("Failed to load alerts");
+      if (!append) setAlerts([]);
+      setError(err?.message || "Failed to load alerts");
       toast({ title: "Error loading alerts", status: "error" });
     }
     setLoading(false);
@@ -89,7 +49,9 @@ export default function GuardAlertHistory() {
     setAlerts([]);
     setPage(1);
     fetchAlerts(1, false);
-    axios.get("/api/v1/users").then(res => setUsers(res.data));
+    api.get("/users")
+      .then(res => setUsers(asArray(res.data)))
+      .catch(() => setUsers([]));
     // eslint-disable-next-line
   }, [filter]);
 
@@ -99,8 +61,14 @@ export default function GuardAlertHistory() {
     // eslint-disable-next-line
   }, [page]);
 
-  const filtered = filter ? alerts.filter(a => a.feedback_status === filter) : alerts;
+  // The server already applied the feedback filter across the full result set.
+  const filtered = alerts;
   const exportCols = ALL_COLUMNS.filter(c => selectedColumns.includes(c.key));
+
+  const formatCell = (row, column) =>
+    column.key === "timestamp"
+      ? formatDate(row[column.key], dateFormat)
+      : String(row[column.key] ?? "");
 
   // Infinite scroll
   const observer = useRef();
@@ -115,15 +83,28 @@ export default function GuardAlertHistory() {
     if (node) observer.current.observe(node);
   }, [loading, page, totalPages]);
 
-  const assignAlert = (alertId, userId) => {
-    axios.post(`/api/v1/alerts/${alertId}/assign`, { user_id: userId }).then(() => fetchAlerts(1, false));
-  };
-  const updateStatus = (alertId, status) => {
-    axios.post(`/api/v1/alerts/${alertId}/status`, { status }).then(() => fetchAlerts(1, false));
-  };
-  const addComment = (alertId, comment) => {
-    axios.post(`/api/v1/alerts/${alertId}/comment`, { comment }).then(() => fetchAlerts(1, false));
-    setComment("");
+  const runAlertAction = (request, failureTitle) =>
+    request
+      .then(() => fetchAlerts(1, false))
+      .catch(() => toast({ title: failureTitle, status: "error" }));
+
+  const assignAlert = (alertId, userId) =>
+    runAlertAction(
+      api.post(`/alerts/${alertId}/assign`, { user_id: userId }),
+      "Failed to assign alert"
+    );
+  const updateStatus = (alertId, status) =>
+    runAlertAction(
+      api.post(`/alerts/${alertId}/status`, { status }),
+      "Failed to update status"
+    );
+  const addComment = (alertId, commentText) => {
+    if (!commentText || !commentText.trim()) return;
+    runAlertAction(
+      api.post(`/alerts/${alertId}/comment`, { comment: commentText.trim() }),
+      "Failed to add comment"
+    );
+    setCommentDrafts(prev => ({ ...prev, [alertId]: "" }));
   };
 
   return (
@@ -148,9 +129,9 @@ export default function GuardAlertHistory() {
           <option value="date">Date Only</option>
           <option value="time">Time Only</option>
         </Select>
-        <Button colorScheme="green" onClick={() => exportCSV(filtered, "alerts.csv", exportCols, dateFormat)}>Export CSV</Button>
-        <Button colorScheme="blue" onClick={() => exportExcel(filtered, "alerts.xlsx", exportCols, dateFormat)}>Export Excel</Button>
-        <Button colorScheme="red" onClick={() => exportPDF(filtered, "alerts.pdf", exportCols, dateFormat)}>Export PDF</Button>
+        <Button colorScheme="green" onClick={() => exportCSV(filtered, "alerts.csv", exportCols, formatCell)}>Export CSV</Button>
+        <Button colorScheme="blue" onClick={() => exportExcel(filtered, "alerts.xlsx", exportCols, "Alerts", formatCell)}>Export Excel</Button>
+        <Button colorScheme="red" onClick={() => exportPDF(filtered, "alerts.pdf", exportCols, formatCell)}>Export PDF</Button>
       </HStack>
       <Table variant="simple">
         <Thead>
@@ -186,9 +167,29 @@ export default function GuardAlertHistory() {
                 </Select>
               </Td>
               <Td>
-                <Box maxW="200px" whiteSpace="pre-wrap">{alert.comments}</Box>
-                <Textarea size="xs" value={comment} onChange={e => setComment(e.target.value)} placeholder="Add comment..." />
-                <Button size="xs" mt={1} onClick={() => addComment(alert.id, comment)}>Add</Button>
+                <Box maxW="240px">
+                  {asArray(alert.comments).map(c => (
+                    <Box key={c.id} mb={1} fontSize="xs">
+                      <Box as="span" fontWeight="bold">{c.author_email || "Unknown"}</Box>
+                      <Box as="span" color="gray.500"> · {formatDate(c.created_at, "datetime")}</Box>
+                      <Box whiteSpace="pre-wrap">{c.body}</Box>
+                    </Box>
+                  ))}
+                </Box>
+                <Textarea
+                  size="xs"
+                  value={commentDrafts[alert.id] || ""}
+                  onChange={e => setCommentDrafts(prev => ({ ...prev, [alert.id]: e.target.value }))}
+                  placeholder="Add comment..."
+                />
+                <Button
+                  size="xs"
+                  mt={1}
+                  isDisabled={!(commentDrafts[alert.id] || "").trim()}
+                  onClick={() => addComment(alert.id, commentDrafts[alert.id])}
+                >
+                  Add
+                </Button>
               </Td>
               <Td>
                 {/* Additional actions if needed */}

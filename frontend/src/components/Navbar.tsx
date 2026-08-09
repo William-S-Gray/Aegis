@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Box, Flex, Button, Spacer, Heading, Link as ChakraLink, HStack, VStack, 
   Text, Avatar, Menu, MenuButton, MenuList, MenuItem, MenuDivider,
@@ -7,12 +7,14 @@ import {
   Divider, Tooltip, useColorModeValue, useToast, Icon
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
+import api from '../api';
+import { asArray } from '../utils/safe';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import type { LinkProps as RouterLinkProps } from 'react-router-dom';
 import { 
   FiUser, FiLogOut, FiSettings, FiBell, FiMenu, FiHome, FiShield, 
-  FiUsers, FiActivity, FiWifi, FiWifiOff, FiBattery, FiBatteryCharging,
-  FiChevronDown, FiChevronRight, FiSearch, FiHelpCircle, FiMessageSquare
+  FiUsers, FiActivity, FiWifi, FiWifiOff, FiBattery, 
+  FiChevronDown, FiChevronRight, FiHelpCircle, FiCheckSquare
 } from 'react-icons/fi';
 
 const LinkWithRef = React.forwardRef<HTMLAnchorElement, RouterLinkProps>((props, ref) => (
@@ -28,7 +30,6 @@ const Navbar: React.FC = () => {
   
   // Responsive design
   const isMobile = useBreakpointValue({ base: true, md: false });
-  const isTablet = useBreakpointValue({ base: false, lg: false, xl: true });
   
   // Theme colors
   const bgColor = useColorModeValue('white', 'gray.800');
@@ -42,12 +43,43 @@ const Navbar: React.FC = () => {
     { id: 3, message: 'Camera 2 connection restored', time: '3 hours ago', read: true, type: 'success' }
   ]);
 
-  const [systemStatus, setSystemStatus] = useState({
+  const [systemStatus] = useState({
     cameras: 'online',
     database: 'online',
     api: 'online',
     websocket: 'online'
   });
+
+  // Queue depth, refreshed periodically. Guards should see work waiting
+  // without having to open the page to find out.
+  const [reviewCount, setReviewCount] = useState(0);
+  const canReview = user?.role === 'admin' || user?.role === 'guard';
+
+  useEffect(() => {
+    if (!canReview) {
+      setReviewCount(0);
+      return;
+    }
+    let cancelled = false;
+
+    const poll = () => {
+      api
+        .get('/alerts/review-queue')
+        .then((res) => {
+          if (!cancelled) setReviewCount(asArray(res.data).length);
+        })
+        .catch(() => {
+          // A transient failure should not blank the badge or spam the user.
+        });
+    };
+
+    poll();
+    const timer = setInterval(poll, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [canReview]);
 
   const handleLogout = () => {
     logout();
@@ -270,7 +302,39 @@ const Navbar: React.FC = () => {
                   Guard
                 </ChakraLink>
               )}
-              
+
+              {canReview && (
+                <ChakraLink
+                  as={LinkWithRef}
+                  to="/review-queue"
+                  px={4}
+                  py={2}
+                  borderRadius="lg"
+                  bg={location.pathname === '/review-queue' ? 'blue.50' : 'white'}
+                  color={location.pathname === '/review-queue' ? 'blue.600' : textColor}
+                  boxShadow="2px 2px 4px #d1d5db, -2px -2px 4px #ffffff"
+                  border="1px solid"
+                  borderColor={borderColor}
+                  _hover={{
+                    boxShadow: '4px 4px 8px #cbd5e1, -4px -4px 8px #ffffff',
+                    transform: 'translateY(-1px)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  textDecoration="none"
+                  display="flex"
+                  alignItems="center"
+                  gap={2}
+                >
+                  <Icon as={FiCheckSquare} w={4} h={4} />
+                  Review
+                  {reviewCount > 0 && (
+                    <Badge colorScheme="orange" borderRadius="full" px={2}>
+                      {reviewCount}
+                    </Badge>
+                  )}
+                </ChakraLink>
+              )}
+
               {user.role === 'user' && (
                 <ChakraLink 
                   as={LinkWithRef} 

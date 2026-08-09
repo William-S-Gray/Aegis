@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box, Heading, Text, VStack, HStack, Card, CardBody, CardHeader, Badge, Button, 
-  SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, useToast, Flex, Spacer,
-  Table, Thead, Tbody, Tr, Th, Td, useColorModeValue, useBreakpointValue,
+  SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, Flex, 
+  useColorModeValue,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure,
-  FormLabel, Input, Select, Spinner, Progress, Divider, Icon
+  Spinner, Icon
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
-import { FiTruck, FiClock, FiMapPin, FiUser, FiShield, FiCalendar } from 'react-icons/fi';
+import api from '../api';
+import { asArray } from '../utils/safe';
+import { FiTruck, FiClock, FiShield, FiCalendar } from 'react-icons/fi';
 
 interface Vehicle {
-  _id: string;
+  id: string;
   plate_number: string;
   make: string;
   model: string;
@@ -19,7 +21,7 @@ interface Vehicle {
 }
 
 interface AccessLog {
-  _id: string;
+  id: string;
   plate_number: string;
   timestamp: string;
   action: string;
@@ -39,53 +41,57 @@ const UserPortal: React.FC = () => {
     lastAccess: 'Never'
   });
   
-  const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
   // Responsive design
-  const isMobile = useBreakpointValue({ base: true, md: false });
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
   useEffect(() => {
-    // Simulate loading user data
-    setTimeout(() => {
-      // Mock data for demonstration
-      const mockVehicles = [
-              { _id: '507f1f77bcf86cd799439021', plate_number: 'ABC123', make: 'Toyota', model: 'Camry', color: 'White', owner_id: user?._id || '507f1f77bcf86cd799439013' },
-      { _id: '507f1f77bcf86cd799439022', plate_number: 'XYZ789', make: 'Honda', model: 'Civic', color: 'Blue', owner_id: user?._id || '507f1f77bcf86cd799439013' }
-      ];
-      
-      const mockLogs = [
-        { _id: '507f1f77bcf86cd799439031', plate_number: 'ABC123', timestamp: '2024-01-15T10:30:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439021' },
-        { _id: '507f1f77bcf86cd799439032', plate_number: 'ABC123', timestamp: '2024-01-15T18:45:00Z', action: 'Exit', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439021' },
-        { _id: '507f1f77bcf86cd799439033', plate_number: 'XYZ789', timestamp: '2024-01-14T09:15:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439022' }
-      ];
+    if (!user) return;
+    let cancelled = false;
+    setLoading(true);
 
-      setVehicles(mockVehicles);
-      setAccessLogs(mockLogs);
-      
-      // Calculate stats
-      const thisMonth = mockLogs.filter(log => {
-        const logDate = new Date(log.timestamp);
+    // Both endpoints scope their results to the caller server-side, so a user
+    // only ever receives their own vehicles and access history.
+    Promise.all([
+      api.get('/vehicles').catch(() => ({ data: [] })),
+      api.get('/logs').catch(() => ({ data: [] })),
+    ])
+      .then(([vehicleRes, logRes]) => {
+        if (cancelled) return;
+        const ownVehicles = asArray<Vehicle>(vehicleRes.data);
+        const logs = asArray<AccessLog>(logRes.data);
+
+        setVehicles(ownVehicles);
+        setAccessLogs(logs);
+
         const now = new Date();
-        return logDate.getMonth() === now.getMonth() && logDate.getFullYear() === now.getFullYear();
-      }).length;
+        const thisMonth = logs.filter(log => {
+          const logDate = new Date(log.timestamp);
+          return (
+            logDate.getMonth() === now.getMonth() &&
+            logDate.getFullYear() === now.getFullYear()
+          );
+        }).length;
 
-      const lastAccess = mockLogs.length > 0 
-        ? new Date(mockLogs[0].timestamp).toLocaleDateString()
-        : 'Never';
-
-      setStats({
-        totalVehicles: mockVehicles.length,
-        totalAccesses: mockLogs.length,
-        thisMonth,
-        lastAccess
+        setStats({
+          totalVehicles: ownVehicles.length,
+          totalAccesses: logs.length,
+          thisMonth,
+          lastAccess: logs.length
+            ? new Date(logs[0].timestamp).toLocaleDateString()
+            : 'Never',
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-      
-      setLoading(false);
-    }, 1000);
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   const handleVehicleClick = (vehicle: Vehicle) => {
@@ -93,13 +99,9 @@ const UserPortal: React.FC = () => {
     onOpen();
   };
 
-  const getActionColor = (action: string) => {
-    return action === 'Entry' ? 'green' : 'red';
-  };
-
-  const getActionIcon = (action: string) => {
-    return action === 'Entry' ? '→' : '←';
-  };
+  const isInbound = (action: string) => ['entry', 'approve'].includes(action.toLowerCase());
+  const getActionColor = (action: string) => (isInbound(action) ? 'green' : 'red');
+  const getActionIcon = (action: string) => (isInbound(action) ? '→' : '←');
 
   if (loading) {
     return (
@@ -208,7 +210,7 @@ const UserPortal: React.FC = () => {
               <VStack spacing={4} align="stretch">
                 {vehicles.map((vehicle) => (
                   <Card 
-                    key={vehicle._id} 
+                    key={vehicle.id} 
                     variant="outline" 
                     cursor="pointer"
                     _hover={{ bg: 'gray.50' }}
@@ -260,7 +262,7 @@ const UserPortal: React.FC = () => {
               <VStack spacing={3} align="stretch">
                 {accessLogs.slice(0, 5).map((log) => (
                   <Flex 
-                    key={log._id} 
+                    key={log.id} 
                     justify="space-between" 
                     align="center" 
                     p={3} 

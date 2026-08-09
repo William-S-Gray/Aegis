@@ -1,0 +1,127 @@
+# Alert rules for Aegis.
+#
+# Each rule states what it means and what to do, because an alert that fires at
+# 03:00 without a next step is noise the team will learn to ignore.
+
+groups:
+  - name: aegis-availability
+    rules:
+      - alert: AegisApiDown
+        expr: up{job="aegis-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Aegis API is not responding to scrapes"
+          description: >-
+            No successful scrape for 2 minutes. Gates cannot record decisions
+            and guards receive no alerts. Check the container and the database
+            connection.
+
+      - alert: AegisHighErrorRate
+        expr: >-
+          sum(rate(aegis_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(aegis_http_requests_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Over 5% of requests are failing"
+          description: >-
+            Sustained 5xx rate. Correlate with the request_id in the JSON logs
+            to find the failing route.
+
+      - alert: AegisSlowRequests
+        expr: >-
+          histogram_quantile(
+            0.95,
+            sum(rate(aegis_http_request_duration_seconds_bucket[5m])) by (le, route)
+          ) > 2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "95th percentile latency above 2s on {{ $labels.route }}"
+          description: >-
+            A guard waiting on a gate decision will treat this as a failure.
+            Usually a missing index or database contention.
+
+  - name: aegis-security
+    rules:
+      - alert: AegisLoginFailureSpike
+        expr: sum(rate(aegis_login_attempts_total{outcome="failed"}[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated failed-login rate"
+          description: >-
+            Sustained failures suggest credential stuffing. Throttling limits
+            the damage but does not stop a distributed attempt. Check
+            auth.login.failed entries in the audit log for the source IPs.
+
+      - alert: AegisLoginThrottlingActive
+        expr: sum(rate(aegis_login_attempts_total{outcome="throttled"}[5m])) > 0.2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Accounts are being locked out"
+          description: >-
+            Either an attack, or a legitimate user (or an integration with a
+            stale password) is locked out. Check which before assuming.
+
+  - name: aegis-operations
+    rules:
+      # The quiet failure: everything looks healthy while nobody is actually
+      # being notified of anything.
+      - alert: AegisNoGuardsConnected
+        expr: sum(aegis_websocket_connections) == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No guard is receiving live alerts"
+          description: >-
+            No open alert-stream connections. Detections are still recorded,
+            but nobody is being notified in real time. Expected out of hours —
+            page only if this fires during a staffed shift.
+
+      - alert: AegisReviewQueueBacklog
+        expr: aegis_review_queue_depth > 50
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} plate reads awaiting human confirmation"
+          description: >-
+            Low-confidence detections are piling up unreviewed. Either staffing
+            is short or the detector has degraded — check the correction ratio
+            before adding people.
+
+      - alert: AegisDetectorAccuracyDrift
+        expr: >-
+          sum(rate(aegis_plate_confirmations_total{outcome="corrected"}[6h]))
+          / sum(rate(aegis_plate_confirmations_total[6h])) > 0.4
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Humans are correcting over 40% of reviewed reads"
+          description: >-
+            The measured error rate on low-confidence reads has risen. Common
+            causes: a camera moved, lighting changed, or a model was deployed
+            without evaluation. Compare by detector_version.
+
+      - alert: AegisAllDetectionsRejected
+        expr: >-
+          sum(rate(aegis_alerts_rejected_total[15m])) > 0
+          and sum(rate(aegis_alerts_created_total[15m])) == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Every detection is being rejected below the confidence floor"
+          description: >-
+            The vision service is producing output but nothing is usable —
+            a camera is likely obscured, defocused, or pointed at nothing.

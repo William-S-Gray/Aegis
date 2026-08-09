@@ -1,14 +1,19 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { ChakraProvider, extendTheme } from '@chakra-ui/react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { Center, ChakraProvider, extendTheme, Spinner } from '@chakra-ui/react';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
-import GuardDashboard from './pages/GuardDashboard';
-import AdminAnalytics from "./pages/AdminAnalytics";
-import GuardAlertHistory from "./pages/GuardAlertHistory";
+import ErrorBoundary from './components/ErrorBoundary';
+import ProtectedRoute from './components/ProtectedRoute';
+import Unauthorized from './pages/Unauthorized';
+import NotFound from './pages/NotFound';
 
 // Lazy load components
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
+const GuardDashboard = React.lazy(() => import('./pages/GuardDashboard'));
+const AdminAnalytics = React.lazy(() => import('./pages/AdminAnalytics'));
+const GuardAlertHistory = React.lazy(() => import('./pages/GuardAlertHistory'));
+const ReviewQueue = React.lazy(() => import('./pages/ReviewQueue'));
 const UserPortal = React.lazy(() => import('./pages/UserPortal'));
 const Login = React.lazy(() => import('./pages/Login'));
 const Home = React.lazy(() => import('./pages/Home'));
@@ -173,9 +178,78 @@ const theme = extendTheme({
   },
 });
 
-function ProtectedRoute({ children, role: _role }: { children: React.ReactElement, role?: string }) {
-  // Add authentication logic here
-  return children;
+const PageFallback = () => (
+  <Center minH="60vh">
+    <Spinner size="lg" color="brand.500" thickness="3px" label="Loading" />
+  </Center>
+);
+
+function AppRoutes() {
+  const location = useLocation();
+
+  return (
+    // Keyed on pathname so navigating away from a crashed screen clears the error.
+    <ErrorBoundary resetKey={location.pathname}>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
+
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute roles={['admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute roles={['admin']}>
+                <AdminAnalytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/guard"
+            element={
+              <ProtectedRoute roles={['admin', 'guard']}>
+                <GuardDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/alert-history"
+            element={
+              <ProtectedRoute roles={['admin', 'guard']}>
+                <GuardAlertHistory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/review-queue"
+            element={
+              <ProtectedRoute roles={['admin', 'guard']}>
+                <ReviewQueue />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user"
+            element={
+              <ProtectedRoute roles={['admin', 'guard', 'user']}>
+                <UserPortal />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
+  );
 }
 
 function App() {
@@ -184,33 +258,7 @@ function App() {
       <AuthProvider>
         <Router>
           <Navbar />
-          <nav style={{ padding: 16, background: "#f7fafc" }}>
-            <Link to="/analytics" style={{ marginRight: 16 }}>Analytics</Link>
-            <Link to="/alert-history">Alert History</Link>
-          </nav>
-          <Suspense fallback={<div>Loading...</div>}>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/admin" element={
-                <ProtectedRoute role="admin">
-                  <AdminDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/guard" element={
-                <ProtectedRoute role="guard">
-                  <GuardDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/user" element={
-                <ProtectedRoute role="user">
-                  <UserPortal />
-                </ProtectedRoute>
-              } />
-              <Route path="/analytics" element={<AdminAnalytics />} />
-              <Route path="/alert-history" element={<GuardAlertHistory />} />
-            </Routes>
-          </Suspense>
+          <AppRoutes />
         </Router>
       </AuthProvider>
     </ChakraProvider>

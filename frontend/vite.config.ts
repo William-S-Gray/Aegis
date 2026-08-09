@@ -1,6 +1,5 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-// @ts-ignore
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
@@ -48,4 +47,19 @@ export default defineConfig({
       },
     }),
   ],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    // Single worker: the default forked pool cannot spawn in some CI sandboxes.
+    pool: 'threads',
+    maxWorkers: 1,
+    setupFiles: './src/setupTests.ts',
+    css: false,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/**/*.{ts,tsx,js,jsx}'],
+      exclude: ['src/**/*.test.*', 'src/setupTests.ts', 'src/main.tsx'],
+    },
+  },
 })

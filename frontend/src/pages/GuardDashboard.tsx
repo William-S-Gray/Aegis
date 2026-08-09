@@ -1,35 +1,53 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
-  Box, Heading, VStack, useToast, Button, Text, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, Badge, HStack, Divider, Tag,
-  Grid, GridItem, Stat, StatLabel, StatNumber, StatHelpText, StatArrow, Card, CardBody, CardHeader, Flex, Spacer, useBreakpointValue,
-  Table, Thead, Tbody, Tr, Th, Td, Progress, SimpleGrid, Icon, useColorModeValue, useDisclosure as useChakraDisclosure,
+  Box, Heading, VStack, useToast, Button, Text, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, Badge, HStack, 
+  Grid, Stat, StatLabel, StatNumber, StatHelpText, StatArrow, Card, CardBody, CardHeader, Flex, Spacer,
+  Progress, SimpleGrid, Icon, useColorModeValue,
   FormControl, FormLabel, Input, Select, Textarea, Switch, Slider, SliderTrack, SliderFilledTrack, SliderThumb, FormHelperText
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
-// @ts-ignore
+import { cameraStreamUrl, guardAlertsSocketUrl } from '../config';
 import db from '../db';
-// @ts-ignore
 import api from '../api';
-// @ts-ignore
+import { apiMessage } from '../utils/safe';
 import { startOfflineSync } from '../services/OfflineSyncService';
 import { 
-  FiActivity, FiAlertTriangle, FiCheckCircle, FiXCircle, FiTrendingUp, FiUsers, FiClock, 
-  FiCamera, FiShield, FiFileText, FiRefreshCw, FiSettings, FiBell, FiMapPin, FiUser, FiTruck,
-  FiDownload, FiEye, FiLock, FiUnlock, FiRadio, FiWifi, FiBattery, FiThermometer
+  FiActivity, FiAlertTriangle, FiCheckCircle, FiXCircle, FiClock, 
+  FiCamera, FiShield, FiFileText, FiRefreshCw, FiSettings, 
+  FiEye, FiUnlock, FiWifi
 } from 'react-icons/fi';
 
-const WS_URL = (guardId: string) => `ws://localhost:8000/ws/guard-alerts/${guardId}`;
+// Endpoints come from src/config.ts so deployments are environment-driven
+// and https origins automatically upgrade to wss.
 
+/** Mirrors AlertPublic from the API. */
 interface Alert {
-  plate: string;
-  status: string;
-  owner?: string;
-  vehicle_info?: any;
+  id: string;
+  plate_number: string;
+  detected_type?: string | null;
+  detected_color?: string | null;
+  registered_type?: string | null;
+  registered_color?: string | null;
+  plate_confidence?: number | null;
+  type_confidence?: number | null;
+  mismatch_type: 'none' | 'type' | 'color' | 'unregistered';
+  status: 'open' | 'in_progress' | 'closed';
+  feedback_status: string;
   timestamp: string;
-  confidence_score?: number;
-  warning_level?: string;
-  warning_message?: string;
 }
+
+// The API reports confidence as 0-1; the UI shows whole percentages.
+const toPercent = (value: number) => Math.round(value * 100);
+const confidenceScheme = (value: number) =>
+  value > 0.8 ? 'green' : value > 0.6 ? 'yellow' : 'red';
+
+// Why the alert fired is the signal a guard acts on, so it drives the styling.
+const MISMATCH_LABEL: Record<string, string> = {
+  none: 'Matches register',
+  type: 'Vehicle type mismatch',
+  color: 'Colour mismatch',
+  unregistered: 'Unregistered plate',
+};
 
 interface Analytics {
   totalAlerts: number;
@@ -107,7 +125,7 @@ const GuardDashboard: React.FC = () => {
     {
       id: 1,
       name: 'Phone Camera (Main Gate)',
-      url: 'http://localhost:8000/video_feed',
+      url: cameraStreamUrl('video_feed'),
       status: 'active',
       lastDetection: null as string | null,
       detectionCount: 0
@@ -115,7 +133,7 @@ const GuardDashboard: React.FC = () => {
     {
       id: 2,
       name: 'Side Entrance Camera',
-      url: 'http://localhost:8001/stream/side-entrance',
+      url: cameraStreamUrl('stream/side-entrance'),
       status: 'inactive',
       lastDetection: null as string | null,
       detectionCount: 0
@@ -123,7 +141,7 @@ const GuardDashboard: React.FC = () => {
     {
       id: 3,
       name: 'Back Gate Camera',
-      url: 'http://localhost:8001/stream/back-gate',
+      url: cameraStreamUrl('stream/back-gate'),
       status: 'inactive',
       lastDetection: null as string | null,
       detectionCount: 0
@@ -134,54 +152,16 @@ const GuardDashboard: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Responsive design
-  const isMobile = useBreakpointValue({ base: true, md: false });
   const bgColor = useColorModeValue('white', 'gray.800');
+  // Hoisted out of the alert list: hooks cannot be called inside a .map callback.
+  const alertItemBg = useColorModeValue('gray.50', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
-
-  useEffect(() => {
-    if (!user?._id || typeof user._id !== 'string') {
-      console.warn('GuardDashboard: user._id is missing or invalid:', user?._id);
-      setWsStatus('disconnected');
-      return;
-    }
-    const wsUrl = WS_URL(user._id.toString());
-    console.log('Connecting to WebSocket:', wsUrl);
-    wsRef.current = new WebSocket(wsUrl);
-    wsRef.current.onopen = () => setWsStatus('connected');
-    wsRef.current.onclose = (event) => {
-      setWsStatus('disconnected');
-      if (!event.wasClean) {
-        toast({ title: 'WebSocket closed unexpectedly', status: 'error' });
-      }
-    };
-    wsRef.current.onerror = (err) => {
-      setWsStatus('error');
-      toast({ title: 'WebSocket error', status: 'error', description: String(err) });
-      console.error('WebSocket error:', err);
-    };
-    wsRef.current.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        setAlert(data);
-        setRecentAlerts((prev) => [data, ...prev.slice(0, 9)]);
-        onOpen();
-        if (audioRef.current) audioRef.current.play();
-        updateAnalytics(data);
-      } catch (error) {
-        console.log('Received non-JSON message:', event.data);
-        if (!event.data.includes('Welcome')) {
-          // Handle other non-JSON messages if needed
-        }
-      }
-    };
-    return () => { wsRef.current && wsRef.current.close(); };
-  }, [user]);
 
   const updateAnalytics = (newAlert: Alert) => {
     setAnalytics(prev => ({
       totalAlerts: prev.totalAlerts + 1,
-      approvedCount: prev.approvedCount + (newAlert.status === 'APPROVED' ? 1 : 0),
-      deniedCount: prev.deniedCount + (newAlert.status === 'DENIED' ? 1 : 0),
+      approvedCount: prev.approvedCount + (newAlert.mismatch_type === 'none' ? 1 : 0),
+      deniedCount: prev.deniedCount + (newAlert.mismatch_type !== 'none' ? 1 : 0),
       todayAlerts: prev.todayAlerts + 1,
       weeklyTrend: prev.weeklyTrend + 1,
       averageResponseTime: Math.round((prev.averageResponseTime + 2.5) / 2) // Mock calculation
@@ -195,10 +175,114 @@ const GuardDashboard: React.FC = () => {
     })));
   };
 
+  /*
+   * Socket handlers live in a ref that is refreshed on every render, so the
+   * effect below depends only on the guard id and the connection is not torn
+   * down whenever an unrelated piece of state changes.
+   */
+  const handlersRef = useRef({ onOpenAlert: onOpen, notify: toast, onAlert: updateAnalytics });
+  handlersRef.current = { onOpenAlert: onOpen, notify: toast, onAlert: updateAnalytics };
+
+  const guardId = user?.id;
+
+  useEffect(() => {
+    if (!guardId) {
+      setWsStatus('disconnected');
+      return;
+    }
+
+    let cancelled = false;
+    let socket: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+
+    // Exponential backoff, capped, so a backend outage does not turn every
+    // guard console into a reconnect storm against a recovering server.
+    const retryDelay = () => Math.min(30000, 1000 * 2 ** attempt) + Math.random() * 500;
+
+    const connect = async () => {
+      if (cancelled) return;
+      setWsStatus('connecting');
+
+      let ticket: string;
+      try {
+        // Exchange the bearer token for a single-use ticket over HTTPS; the
+        // token itself must never appear in a WebSocket URL.
+        const { data } = await api.post<{ ticket: string }>('/auth/ws-ticket');
+        ticket = data.ticket;
+      } catch {
+        if (cancelled) return;
+        setWsStatus('error');
+        attempt += 1;
+        retryTimer = setTimeout(connect, retryDelay());
+        return;
+      }
+
+      if (cancelled) return;
+
+      socket = new WebSocket(guardAlertsSocketUrl(guardId, ticket));
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        attempt = 0;
+        setWsStatus('connected');
+      };
+
+      socket.onclose = () => {
+        if (cancelled) return;
+        setWsStatus('disconnected');
+        attempt += 1;
+        retryTimer = setTimeout(connect, retryDelay());
+      };
+
+      // `onclose` always follows `onerror`, so reconnection is handled there.
+      socket.onerror = () => setWsStatus('error');
+
+      socket.onmessage = (event) => {
+        let message: { type?: string; alert?: Alert };
+        try {
+          message = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+
+        if (message.type === 'ping' || message.type === 'connected') return;
+        if (message.type !== 'alert' || !message.alert) return;
+
+        const incoming = message.alert;
+        setAlert(incoming);
+        setRecentAlerts((prev) => [incoming, ...prev.slice(0, 9)]);
+        handlersRef.current.onOpenAlert();
+        audioRef.current?.play().catch(() => {
+          // Autoplay stays blocked until the user interacts with the page.
+        });
+        handlersRef.current.onAlert(incoming);
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+      // Close cleanly so the handler above does not schedule a reconnect.
+      if (socket) {
+        socket.onclose = null;
+        socket.close();
+      }
+    };
+  }, [guardId]);
+
+  // Flush any access logs queued while offline, and stop the timer on unmount.
+  useEffect(() => {
+    if (!guardId) return;
+    return startOfflineSync();
+  }, [guardId]);
+
   const handleAction = async (action: string) => {
     if (!alert) return;
     const log = {
-      plate_number: alert.plate,
+      plate_number: alert.plate_number,
       action,
       timestamp: new Date().toISOString(),
       details: alert,
@@ -214,49 +298,48 @@ const GuardDashboard: React.FC = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'APPROVED': return 'green';
-      case 'DENIED': return 'red';
-      default: return 'yellow';
+  const getStatusColor = (mismatch: string) => {
+    switch (mismatch) {
+      case 'none': return 'green';
+      case 'unregistered': return 'red';
+      default: return 'orange';
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'APPROVED': return FiCheckCircle;
-      case 'DENIED': return FiXCircle;
+  const getStatusIcon = (mismatch: string) => {
+    switch (mismatch) {
+      case 'none': return FiCheckCircle;
+      case 'unregistered': return FiXCircle;
       default: return FiAlertTriangle;
     }
   };
 
   // Quick Actions Handlers
   const handleManualScan = async () => {
+    if (!manualScanData.plateNumber.trim()) {
+      toast({ title: 'Enter a plate number', status: 'warning' });
+      return;
+    }
     try {
-      // Mock API call - in real app, this would trigger a manual scan
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const scanResult = {
-        plate: manualScanData.plateNumber,
-        status: 'PENDING',
-        timestamp: new Date().toISOString(),
-        location: manualScanData.location,
-        notes: manualScanData.notes
-      };
-      
-      setRecentAlerts(prev => [scanResult, ...prev.slice(0, 9)]);
-      toast({ 
-        title: 'Manual Scan Initiated', 
-        description: `Scanning plate ${manualScanData.plateNumber} at ${manualScanData.location}`,
-        status: 'success' 
+      // Raises a real alert. The server classifies it against the register and
+      // broadcasts it back over the socket, which is what updates the list —
+      // so there is deliberately no local insert here.
+      const { data } = await api.post<Alert>('/alerts', {
+        plate_number: manualScanData.plateNumber,
+      });
+
+      toast({
+        title: 'Alert raised',
+        description: `${data.plate_number}: ${MISMATCH_LABEL[data.mismatch_type] ?? data.mismatch_type}`,
+        status: data.mismatch_type === 'none' ? 'success' : 'warning',
       });
       onManualScanClose();
       setManualScanData({ plateNumber: '', location: 'Main Gate', notes: '' });
     } catch (error) {
-      toast({ 
-        title: 'Scan Failed', 
-        description: 'Unable to initiate manual scan',
-        status: 'error' 
+      toast({
+        title: 'Scan failed',
+        description: apiMessage(error, 'Unable to raise an alert'),
+        status: 'error',
       });
     }
   };
@@ -334,23 +417,27 @@ const GuardDashboard: React.FC = () => {
   };
 
   const handleOverrideAction = async () => {
+    if (!overrideData.plateNumber.trim() || !overrideData.reason.trim()) {
+      toast({ title: 'Plate number and reason are required', status: 'warning' });
+      return;
+    }
     try {
-      // Mock override action - in real app, this would override system decision
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const overrideResult = {
-        plate: overrideData.plateNumber,
-        status: overrideData.action.toUpperCase(),
-        timestamp: new Date().toISOString(),
-        reason: overrideData.reason,
-        authorizedBy: user?.email || 'Unknown'
-      };
-      
-      setRecentAlerts(prev => [overrideResult, ...prev.slice(0, 9)]);
-      toast({ 
-        title: 'Override Action Applied', 
-        description: `Vehicle ${overrideData.plateNumber} has been ${overrideData.action}d`,
-        status: 'success' 
+      // An override is a recorded access decision, not a UI-only action: it is
+      // written to the access log with its justification so it can be audited.
+      await api.post('/access-logs', {
+        plate_number: overrideData.plateNumber,
+        action: 'override',
+        details: {
+          decision: overrideData.action,
+          reason: overrideData.reason,
+          authorization: overrideData.authorization,
+        },
+      });
+
+      toast({
+        title: 'Override recorded',
+        description: `${overrideData.plateNumber} — ${overrideData.action}`,
+        status: 'success',
       });
       
       onOverrideClose();
@@ -361,10 +448,10 @@ const GuardDashboard: React.FC = () => {
         authorization: ''
       });
     } catch (error) {
-      toast({ 
-        title: 'Override Failed', 
-        description: 'Unable to apply override action',
-        status: 'error' 
+      toast({
+        title: 'Override failed',
+        description: apiMessage(error, 'Unable to record the override'),
+        status: 'error',
       });
     }
   };
@@ -549,7 +636,7 @@ const GuardDashboard: React.FC = () => {
                       overflow="hidden"
                     >
                       <img
-                        src="http://localhost:8000/video_feed"
+                        src={cameraStreamUrl('video_feed')}
                         alt="Live Camera Feed"
                         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                         onError={(e) => {
@@ -699,19 +786,19 @@ const GuardDashboard: React.FC = () => {
                     border="1px" 
                     borderColor={borderColor} 
                     borderRadius="md"
-                    bg={useColorModeValue('gray.50', 'gray.700')}
+                    bg={alertItemBg}
                   >
                     <Flex justify="space-between" align="center" mb={2}>
                       <HStack spacing={3}>
                         <Icon 
-                          as={getStatusIcon(alert.status)} 
-                          color={`${getStatusColor(alert.status)}.500`} 
+                          as={getStatusIcon(alert.mismatch_type)} 
+                          color={`${getStatusColor(alert.mismatch_type)}.500`} 
                           w={5} 
                           h={5} 
                         />
-                        <Text fontWeight="bold" fontSize="lg">{alert.plate}</Text>
-                        <Badge colorScheme={getStatusColor(alert.status)} variant="subtle">
-                          {alert.status}
+                        <Text fontWeight="bold" fontSize="lg">{alert.plate_number}</Text>
+                        <Badge colorScheme={getStatusColor(alert.mismatch_type)} variant="subtle">
+                          {MISMATCH_LABEL[alert.mismatch_type] ?? alert.mismatch_type}
                         </Badge>
                       </HStack>
                       <Text fontSize="sm" color="gray.500">
@@ -719,24 +806,26 @@ const GuardDashboard: React.FC = () => {
                       </Text>
                     </Flex>
                     
-                    {alert.owner && (
+                    {(alert.detected_type || alert.detected_color) && (
                       <Text fontSize="sm" color="gray.600" mb={1}>
-                        Owner: {alert.owner}
+                        Detected: {[alert.detected_color, alert.detected_type].filter(Boolean).join(' ')}
                       </Text>
                     )}
-                    
-                    {alert.vehicle_info && (
+
+                    {(alert.registered_type || alert.registered_color) && (
                       <Text fontSize="sm" color="gray.600" mb={1}>
-                        Vehicle: {alert.vehicle_info.make} {alert.vehicle_info.model} ({alert.vehicle_info.color})
+                        Registered: {[alert.registered_color, alert.registered_type].filter(Boolean).join(' ')}
                       </Text>
                     )}
-                    
-                    {alert.confidence_score && (
+
+                    {typeof alert.plate_confidence === 'number' && (
                       <Box>
-                        <Text fontSize="sm" color="gray.600" mb={1}>Confidence: {alert.confidence_score}%</Text>
-                        <Progress 
-                          value={alert.confidence_score} 
-                          colorScheme={alert.confidence_score > 80 ? 'green' : alert.confidence_score > 60 ? 'yellow' : 'red'}
+                        <Text fontSize="sm" color="gray.600" mb={1}>
+                          Plate confidence: {toPercent(alert.plate_confidence)}%
+                        </Text>
+                        <Progress
+                          value={toPercent(alert.plate_confidence)}
+                          colorScheme={confidenceScheme(alert.plate_confidence)}
                           size="sm"
                         />
                       </Box>
@@ -888,41 +977,47 @@ const GuardDashboard: React.FC = () => {
       <Modal isOpen={isOpen} onClose={onClose} size="lg">
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>New Alert - {alert?.plate}</ModalHeader>
+          <ModalHeader>New Alert - {alert?.plate_number}</ModalHeader>
           <ModalBody>
             {alert && (
               <VStack spacing={4} align="stretch">
                 <HStack justify="space-between">
                   <Text fontWeight="bold">Status:</Text>
-                  <Badge colorScheme={getStatusColor(alert.status)} size="lg">
-                    {alert.status}
+                  <Badge colorScheme={getStatusColor(alert.mismatch_type)} size="lg">
+                    {MISMATCH_LABEL[alert.mismatch_type] ?? alert.mismatch_type}
                   </Badge>
                 </HStack>
                 
-                {alert.owner && (
+                <HStack justify="space-between">
+                  <Text fontWeight="bold">Detected:</Text>
+                  <Text>
+                    {[alert.detected_color, alert.detected_type].filter(Boolean).join(' ') || '—'}
+                  </Text>
+                </HStack>
+
+                <HStack justify="space-between">
+                  <Text fontWeight="bold">Registered:</Text>
+                  <Text>
+                    {[alert.registered_color, alert.registered_type].filter(Boolean).join(' ') ||
+                      'Not registered'}
+                  </Text>
+                </HStack>
+
+                {typeof alert.plate_confidence === 'number' && (
                   <HStack justify="space-between">
-                    <Text fontWeight="bold">Owner:</Text>
-                    <Text>{alert.owner}</Text>
+                    <Text fontWeight="bold">Plate confidence:</Text>
+                    <Text>{toPercent(alert.plate_confidence)}%</Text>
                   </HStack>
                 )}
-                
-                {alert.vehicle_info && (
-                  <HStack justify="space-between">
-                    <Text fontWeight="bold">Vehicle:</Text>
-                    <Text>{alert.vehicle_info.make} {alert.vehicle_info.model}</Text>
-                  </HStack>
-                )}
-                
-                {alert.confidence_score && (
-                  <HStack justify="space-between">
-                    <Text fontWeight="bold">Confidence:</Text>
-                    <Text>{alert.confidence_score}%</Text>
-                  </HStack>
-                )}
-                
-                {alert.warning_message && (
+
+                {alert.mismatch_type !== 'none' && (
                   <Box p={3} bg="red.50" border="1px" borderColor="red.200" borderRadius="md">
-                    <Text color="red.800" fontSize="sm">{alert.warning_message}</Text>
+                    <Text color="red.800" fontSize="sm">
+                      {MISMATCH_LABEL[alert.mismatch_type] ?? alert.mismatch_type}
+                      {alert.mismatch_type === 'unregistered'
+                        ? ' — this plate is not in the register.'
+                        : ' — detected attributes differ from the registered vehicle.'}
+                    </Text>
                   </Box>
                 )}
               </VStack>

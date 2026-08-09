@@ -1,0 +1,438 @@
+import math
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, selectinload
+
+from app.core import audit, metrics
+from app.core.deps import require_guard
+from app.core.ws_manager import manager
+from app.database import get_db
+from app.models import (
+    Alert,
+    AlertComment,
+    AlertStatus,
+    AttributeMismatchRule,
+    FeedbackStatus,
+    MismatchType,
+    ReviewReason,
+    Role,
+    User,
+    Vehicle,
+    normalize_plate,
+)
+from app.schemas import (
+    AlertAssign,
+    AlertCommentCreate,
+    AlertCreate,
+    AlertPage,
+    AlertPublic,
+    AlertStatusUpdate,
+    PlateConfirmation,
+)
+
+from app.config import get_settings
+
+settings = get_settings()
+
+router = APIRouter(prefix="/alerts", tags=["alerts"])
+
+# Terminal states stamp resolved_at, which drives time-to-resolution.
+_TERMINAL_STATUSES = {AlertStatus.CLOSED}
+
+
+def _load(db: Session, alert_id: uuid.UUID) -> Alert:
+    alert = db.scalar(
+        select(Alert).options(selectinload(Alert.comments)).where(Alert.id == alert_id)
+    )
+    if alert is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    return alert
+
+
+def _pair_allowed(db: Session, attribute: str, a: str | None, b: str | None) -> bool:
+    """True when an administrator has declared these two values equivalent."""
+    if not a or not b:
+        return False
+    first, second = AttributeMismatchRule.normalize_pair(a, b)
+    if first == second:
+        return True
+    return (
+        db.scalar(
+            select(AttributeMismatchRule).where(
+                AttributeMismatchRule.attribute == attribute,
+                AttributeMismatchRule.value_a == first,
+                AttributeMismatchRule.value_b == second,
+            )
+        )
+        is not None
+    )
+
+
+def classify_mismatch(db: Session, alert: Alert, vehicle: Vehicle | None) -> MismatchType:
+    """
+    Decide why (or whether) a detection deserves attention.
+
+    An unregistered plate outranks an attribute mismatch: it is the stronger
+    signal and the one a guard must act on first.
+    """
+    if vehicle is None:
+        return MismatchType.UNREGISTERED
+
+    if alert.detected_type and vehicle.vehicle_type:
+        if not _pair_allowed(db, "type", alert.detected_type, vehicle.vehicle_type):
+            return MismatchType.TYPE
+
+    if alert.detected_color and vehicle.color:
+        if not _pair_allowed(db, "color", alert.detected_color, vehicle.color):
+            return MismatchType.COLOR
+
+    return MismatchType.NONE
+
+
+def _review_decision(payload: AlertCreate) -> tuple[bool, ReviewReason | None]:
+    """
+    Decide whether a machine read is trustworthy enough to stand on its own.
+
+    Reads above the auto-accept threshold are acted on directly. Reads between
+    the two thresholds are recorded but flagged for a human to confirm — that
+    band is the difference between a system that is honest about uncertainty
+    and one that quietly invents plate numbers. Anything below the review floor
+    is rejected outright by the caller.
+    """
+    confidence = payload.plate_confidence
+    if confidence is None:
+        # Manual entry by a guard: a person already vouched for it.
+        return False, None
+    if confidence < settings.plate_auto_accept_confidence:
+        return True, ReviewReason.LOW_PLATE_CONFIDENCE
+    if (
+        payload.type_confidence is not None
+        and payload.type_confidence < settings.type_review_confidence
+    ):
+        return True, ReviewReason.LOW_TYPE_CONFIDENCE
+    return False, None
+
+
+@router.get("/review-queue", response_model=list[AlertPublic])
+def review_queue(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[Alert]:
+    """Low-confidence reads awaiting human confirmation, oldest first."""
+    alerts = list(
+        db.scalars(
+            select(Alert)
+            .options(selectinload(Alert.comments))
+            .where(Alert.requires_review.is_(True), Alert.reviewed_at.is_(None))
+            .order_by(Alert.created_at)
+            .limit(limit)
+        ).all()
+    )
+
+    # Reconcile the gauge with the database: counters drift across restarts.
+    metrics.set_review_queue_depth(len(alerts))
+    audit.record(
+        db,
+        action="alert.review_queue_viewed",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        details={"returned": len(alerts)},
+    )
+    db.commit()
+    return alerts
+
+
+@router.post("/{alert_id}/confirm-plate", response_model=AlertPublic)
+def confirm_plate(
+    alert_id: uuid.UUID,
+    payload: PlateConfirmation,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+) -> Alert:
+    """
+    Record a human's reading of a plate the detector was unsure about.
+
+    The corrected plate is re-classified against the register, because a
+    misread is exactly the case where an "unregistered" flag was wrong.
+    """
+    alert = _load(db, alert_id)
+    corrected = normalize_plate(payload.plate_number)
+    if not corrected:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="plate_number must contain at least one alphanumeric character",
+        )
+
+    was = alert.plate_number
+    alert.confirmed_plate = corrected
+    alert.plate_number = corrected
+    alert.requires_review = False
+    alert.reviewed_by = current_user.id
+    alert.reviewed_at = datetime.now(timezone.utc)
+
+    vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == corrected))
+    alert.vehicle_id = vehicle.id if vehicle else None
+    alert.registered_type = vehicle.vehicle_type if vehicle else None
+    alert.registered_color = vehicle.color if vehicle else None
+    alert.mismatch_type = classify_mismatch(db, alert, vehicle)
+
+    metrics.observe_confirmation(corrected=was != corrected)
+    audit.record(
+        db,
+        action="alert.plate_confirmed",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="alert",
+        resource_id=str(alert.id),
+        details={
+            "machine_read": was,
+            "confirmed": corrected,
+            "corrected": was != corrected,
+            "mismatch": alert.mismatch_type.value,
+        },
+    )
+    db.commit()
+    return _load(db, alert_id)
+
+
+@router.get("", response_model=AlertPage)
+def list_alerts(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    feedback_status: FeedbackStatus | None = None,
+    site_id: uuid.UUID | None = None,
+) -> AlertPage:
+    filters = []
+    if feedback_status is not None:
+        filters.append(Alert.feedback_status == feedback_status)
+    if site_id is not None:
+        filters.append(Alert.site_id == site_id)
+
+    total = db.scalar(select(func.count()).select_from(Alert).where(*filters)) or 0
+
+    alerts = list(
+        db.scalars(
+            select(Alert)
+            .options(selectinload(Alert.comments))
+            .where(*filters)
+            .order_by(Alert.created_at.desc())
+            .offset((page - 1) * limit)
+            .limit(limit)
+        ).all()
+    )
+
+    audit.record(
+        db,
+        action="alert.list",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="alert",
+        details={"returned": len(alerts), "page": page},
+    )
+    db.commit()
+
+    return AlertPage(
+        alerts=[AlertPublic.model_validate(a) for a in alerts],
+        total=total,
+        page=page,
+        total_pages=max(1, math.ceil(total / limit)),
+    )
+
+
+@router.post("", response_model=AlertPublic, status_code=status.HTTP_201_CREATED)
+def create_alert(
+    payload: AlertCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+) -> Alert:
+    """
+    Raise an alert from a detection.
+
+    The vision service will call this once it exists; until then it backs
+    manual entry from the guard console.
+    """
+    if (
+        payload.plate_confidence is not None
+        and payload.plate_confidence < settings.plate_review_floor_confidence
+    ):
+        # Too weak to be actionable. Recording it would bury real alerts under
+        # noise, so it is refused and the caller counts it as a discard.
+        metrics.alerts_rejected.labels(reason="below_review_floor").inc()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Plate confidence below the review floor "
+                f"({settings.plate_review_floor_confidence})"
+            ),
+        )
+
+    normalized = normalize_plate(payload.plate_number)
+    vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == normalized))
+
+    alert = Alert(
+        plate_number=normalized,
+        detected_type=payload.detected_type,
+        detected_color=payload.detected_color,
+        plate_confidence=payload.plate_confidence,
+        type_confidence=payload.type_confidence,
+        # Snapshot the register now so later edits cannot rewrite history.
+        registered_type=vehicle.vehicle_type if vehicle else None,
+        registered_color=vehicle.color if vehicle else None,
+        vehicle_id=vehicle.id if vehicle else None,
+        site_id=payload.site_id or (vehicle.site_id if vehicle else None),
+        detector_name=payload.detector_name,
+        detector_version=payload.detector_version,
+    )
+    alert.mismatch_type = classify_mismatch(db, alert, vehicle)
+
+    requires_review, review_reason = _review_decision(payload)
+    alert.requires_review = requires_review
+    alert.review_reason = review_reason
+
+    db.add(alert)
+    db.flush()
+
+    audit.record(
+        db,
+        action="alert.created",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="alert",
+        resource_id=str(alert.id),
+        details={"plate_number": normalized, "mismatch": alert.mismatch_type.value},
+    )
+    db.commit()
+    metrics.observe_alert(alert.mismatch_type.value, requires_review)
+
+    created = _load(db, alert.id)
+    # Push to every connected guard and administrator. Delivery is best effort:
+    # the alert is already durable, and a missed socket must not fail the write.
+    manager.broadcast_threadsafe(
+        {
+            "type": "alert",
+            "alert": AlertPublic.model_validate(created).model_dump(mode="json"),
+        },
+        roles={Role.ADMIN, Role.GUARD},
+    )
+    return created
+
+
+@router.post("/{alert_id}/assign", response_model=AlertPublic)
+def assign_alert(
+    alert_id: uuid.UUID,
+    payload: AlertAssign,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+) -> Alert:
+    alert = _load(db, alert_id)
+
+    if payload.user_id is not None:
+        assignee = db.get(User, payload.user_id)
+        if assignee is None or not assignee.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Unknown or inactive assignee",
+            )
+
+    alert.assigned_to = payload.user_id
+    if payload.user_id and alert.status == AlertStatus.OPEN:
+        alert.status = AlertStatus.IN_PROGRESS
+
+    audit.record(
+        db,
+        action="alert.assigned",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="alert",
+        resource_id=str(alert.id),
+        details={"assigned_to": str(payload.user_id) if payload.user_id else None},
+    )
+    db.commit()
+    return _load(db, alert_id)
+
+
+@router.post("/{alert_id}/status", response_model=AlertPublic)
+def update_alert_status(
+    alert_id: uuid.UUID,
+    payload: AlertStatusUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+) -> Alert:
+    alert = _load(db, alert_id)
+
+    alert.status = payload.status
+    if payload.feedback_status is not None:
+        alert.feedback_status = payload.feedback_status
+
+    if payload.status in _TERMINAL_STATUSES:
+        # Only stamp the first time, so reopening and reclosing does not
+        # silently reset the resolution clock.
+        if alert.resolved_at is None:
+            alert.resolved_at = datetime.now(timezone.utc)
+    else:
+        alert.resolved_at = None
+
+    audit.record(
+        db,
+        action="alert.status_changed",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="alert",
+        resource_id=str(alert.id),
+        details={
+            "status": alert.status.value,
+            "feedback_status": alert.feedback_status.value,
+        },
+    )
+    db.commit()
+    return _load(db, alert_id)
+
+
+@router.post("/{alert_id}/comment", response_model=AlertPublic)
+def add_comment(
+    alert_id: uuid.UUID,
+    payload: AlertCommentCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+) -> Alert:
+    alert = _load(db, alert_id)
+
+    db.add(
+        AlertComment(
+            alert_id=alert.id,
+            author_id=current_user.id,
+            author_email=current_user.email,
+            body=payload.comment.strip(),
+        )
+    )
+
+    audit.record(
+        db,
+        action="alert.commented",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="alert",
+        resource_id=str(alert.id),
+    )
+    db.commit()
+    return _load(db, alert_id)

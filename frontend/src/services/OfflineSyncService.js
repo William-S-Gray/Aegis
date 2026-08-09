@@ -1,25 +1,34 @@
 import db from '../db';
-import axios from 'axios';
+import api from '../api';
 
-export async function syncAccessLogsQueue(token) {
+/**
+ * Drains the offline queue of access logs. Stops on the first failure so
+ * ordering is preserved and entries are never dropped silently.
+ */
+export async function syncAccessLogsQueue() {
   const logs = await db.access_logs_queue.toArray();
   for (const log of logs) {
     try {
-      await axios.post('/api/v1/access-logs', log, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // The shared client attaches the bearer token, so no manual header here.
+      await api.post('/access-logs', log);
       await db.access_logs_queue.delete(log.id);
     } catch (err) {
-      // If still offline or error, keep in queue
+      // Still offline or the server rejected it: keep the queue intact.
       break;
     }
   }
 }
 
-export function startOfflineSync(token) {
-  setInterval(() => {
-    if (navigator.onLine && token) {
-      syncAccessLogsQueue(token);
+/**
+ * Starts periodic sync. Returns a stop function — the previous implementation
+ * leaked its interval because it never exposed one.
+ */
+export function startOfflineSync() {
+  const intervalId = setInterval(() => {
+    if (navigator.onLine) {
+      syncAccessLogsQueue();
     }
-  }, 10000); // every 10 seconds
-} 
+  }, 10000);
+
+  return () => clearInterval(intervalId);
+}

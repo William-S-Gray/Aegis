@@ -1,0 +1,8 @@
+# Core service. Runs the pipeline with the stub detector and no ML stack.
+httpx==0.28.1
+pydantic==2.11.7
+pydantic-settings==2.7.0
+
+# Development / test
+pytest==8.3.4
+respx==0.22.0

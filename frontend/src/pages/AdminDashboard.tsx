@@ -27,15 +27,10 @@ import {
   ModalHeader,
   ModalBody,
   ModalFooter,
-  Card,
-  CardBody,
-  CardHeader,
   SimpleGrid,
   Stat,
   StatLabel,
   StatNumber,
-  StatHelpText,
-  StatArrow,
   Flex,
   Spacer,
   Badge,
@@ -44,15 +39,8 @@ import {
   Text,
   Icon,
   useColorModeValue,
-  useBreakpointValue,
   Progress,
-  Divider,
   Grid,
-  GridItem,
-  Alert,
-  AlertIcon,
-  AlertTitle,
-  AlertDescription,
   FormControl,
   Slider,
   SliderTrack,
@@ -66,24 +54,22 @@ import {
   FiTruck,
   FiActivity,
   FiAlertTriangle,
-  FiSearch,
-  FiFilter,
+  
+  
   FiDownload,
   FiRefreshCw,
   FiTrendingUp,
-  FiTrendingDown,
+  
   FiShield,
   FiClock,
   FiMapPin,
-  FiPlus,
-  FiEdit,
-  FiTrash2,
-  FiEye
 } from 'react-icons/fi';
 import api from '../api';
+import { mockAuthEnabled } from '../config';
+import { asArray, apiMessage } from '../utils/safe';
 
 interface User {
-  _id: string;
+  id: string;
   full_name: string;
   email: string;
   password?: string;
@@ -92,8 +78,9 @@ interface User {
 }
 
 interface Vehicle {
-  _id: string;
+  id: string;
   plate_number: string;
+  plate_display?: string;
   make: string;
   model: string;
   color: string;
@@ -101,12 +88,20 @@ interface Vehicle {
 }
 
 interface Log {
-  _id: string;
+  id: string;
   plate_number: string;
   timestamp: string;
   action: string;
   user_id: string;
   vehicle_id: string;
+}
+
+interface ReportData {
+  totalAccess?: number;
+  authorizedAccess?: number;
+  unauthorizedAccess?: number;
+  alerts?: number;
+  systemUptime?: number;
 }
 
 interface Analytics {
@@ -118,35 +113,39 @@ interface Analytics {
   monthlyAlerts: number;
 }
 
-// Mock chart data
-const mockChartData = {
-  dailyAlerts: [
-    { day: 'Mon', alerts: 12, approved: 8, denied: 4 },
-    { day: 'Tue', alerts: 15, approved: 11, denied: 4 },
-    { day: 'Wed', alerts: 8, approved: 6, denied: 2 },
-    { day: 'Thu', alerts: 20, approved: 14, denied: 6 },
-    { day: 'Fri', alerts: 18, approved: 12, denied: 6 },
-    { day: 'Sat', alerts: 10, approved: 7, denied: 3 },
-    { day: 'Sun', alerts: 5, approved: 4, denied: 1 }
-  ],
-  userActivity: [
-    { role: 'Admin', count: 2, percentage: 10 },
-    { role: 'Guard', count: 8, percentage: 40 },
-    { role: 'User', count: 10, percentage: 50 }
-  ]
-};
+/*
+ * Sample rows used only when VITE_ENABLE_MOCK_AUTH is on, so the UI can be
+ * developed before the backend exists. Never shown in staging or production.
+ */
+const SAMPLE_USERS: User[] = [
+  { id: 'sample-1', full_name: 'Admin User', email: 'admin@example.com', role: 'admin', is_active: true },
+  { id: 'sample-2', full_name: 'Guard User', email: 'guard@example.com', role: 'guard', is_active: true },
+  { id: 'sample-3', full_name: 'Regular User', email: 'user@example.com', role: 'user', is_active: true },
+];
+
+const SAMPLE_VEHICLES: Vehicle[] = [
+  { id: 'sample-v1', plate_number: 'ABC123', make: 'Toyota', model: 'Camry', color: 'White', owner_id: 'sample-3' },
+  { id: 'sample-v2', plate_number: 'XYZ789', make: 'Honda', model: 'Civic', color: 'Blue', owner_id: 'sample-3' },
+];
+
+const SAMPLE_LOGS: Log[] = [
+  { id: 'sample-l1', plate_number: 'ABC123', timestamp: new Date().toISOString(), action: 'Entry', user_id: 'sample-2', vehicle_id: 'sample-v1' },
+  { id: 'sample-l2', plate_number: 'XYZ789', timestamp: new Date().toISOString(), action: 'Exit', user_id: 'sample-2', vehicle_id: 'sample-v2' },
+];
 
 const AdminDashboard: React.FC = () => {
-  const [stats, setStats] = useState({
-    totalUsers: 156,
-    totalVehicles: 1247,
-    activeAlerts: 3,
-    systemUptime: 99.9,
-    recentActivity: 89,
-    securityScore: 94
+  /*
+   * Uptime and security score have no data source yet; they render as "—"
+   * rather than as invented figures. Wire them to real health/scoring
+   * endpoints when those exist.
+   */
+  const [stats] = useState<{ systemUptime: number | null; securityScore: number | null }>({
+    systemUptime: null,
+    securityScore: null
   });
+  const [loadError, setLoadError] = useState('');
 
-  const [recentAlerts, setRecentAlerts] = useState([
+  const [recentAlerts] = useState([
     {
       id: 1,
       type: 'Unauthorized Access',
@@ -176,7 +175,7 @@ const AdminDashboard: React.FC = () => {
     }
   ]);
 
-  const [recentActivity, setRecentActivity] = useState([
+  const [recentActivity] = useState([
     { id: 1, user: 'John Doe', action: 'Vehicle registered', time: '5 min ago', type: 'success' },
     { id: 2, user: 'Jane Smith', action: 'Access granted', time: '12 min ago', type: 'info' },
     { id: 3, user: 'Mike Johnson', action: 'User account created', time: '1 hour ago', type: 'success' },
@@ -185,7 +184,7 @@ const AdminDashboard: React.FC = () => {
 
   // User Management
   const [users, setUsers] = useState<User[]>([]);
-  const [userForm, setUserForm] = useState<Omit<User, 'id' | 'is_active'> & { password?: string }>({ full_name: '', email: '', password: '', role: 'guard' });
+  const [userForm, setUserForm] = useState<Omit<User, 'id' | 'is_active'>>({ full_name: '', email: '', password: '', role: 'guard' });
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
@@ -231,279 +230,177 @@ const AdminDashboard: React.FC = () => {
   // System Reports Modal
   const { isOpen: isReportsOpen, onOpen: onReportsOpen, onClose: onReportsClose } = useDisclosure();
   const [selectedReport, setSelectedReport] = useState('daily');
-  const [reportData, setReportData] = useState<any>(null);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
 
   // Responsive design
-  const isMobile = useBreakpointValue({ base: true, md: false });
-  const bgColor = useColorModeValue('gray.100', 'gray.800');
   const cardBg = useColorModeValue('white', 'gray.700');
 
   // Fetch users
   useEffect(() => {
+    let cancelled = false;
     setLoadingUsers(true);
-    // For now, use mock data since we don't have proper authentication set up
-    // In a real app, you would get the auth token from localStorage or context
-    const mockUsers = [
-      { _id: '507f1f77bcf86cd799439011', full_name: 'Admin User', email: 'admin@example.com', role: 'admin', is_active: true },
-      { _id: '507f1f77bcf86cd799439012', full_name: 'Guard User', email: 'guard@example.com', role: 'guard', is_active: true },
-      { _id: '507f1f77bcf86cd799439013', full_name: 'Regular User', email: 'user@example.com', role: 'user', is_active: true },
-      { _id: '507f1f77bcf86cd799439014', full_name: 'John Doe', email: 'john@example.com', role: 'user', is_active: true },
-      { _id: '507f1f77bcf86cd799439015', full_name: 'Jane Smith', email: 'jane@example.com', role: 'guard', is_active: true }
-    ];
-    setUsers(mockUsers);
-    setAnalytics(prev => ({
-      ...prev,
-      totalUsers: mockUsers.length,
-      activeUsers: mockUsers.filter(u => u.is_active).length
-    }));
-    setLoadingUsers(false);
-    
-    // Uncomment this when you have proper authentication set up
-    /*
-    const token = localStorage.getItem('token');
-    if (token) {
-      api.get('/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
+    api.get('/users')
+      .then((res) => {
+        if (cancelled) return;
+        const userData = asArray<User>(res.data);
+        setUsers(userData);
+        setAnalytics(prev => ({
+          ...prev,
+          totalUsers: userData.length,
+          activeUsers: userData.filter(u => u.is_active).length
+        }));
       })
-        .then((res: { data: User[] }) => {
-          const userData = res.data || [];
-          setUsers(userData);
-          setAnalytics(prev => ({
-            ...prev,
-            totalUsers: userData.length,
-            activeUsers: userData.filter(u => u.is_active).length
-          }));
-        })
-        .catch((err: Error) => {
-          console.error('Failed to fetch users:', err);
-          // Use mock data as fallback
-          setUsers(mockUsers);
-          setAnalytics(prev => ({
-            ...prev,
-            totalUsers: mockUsers.length,
-            activeUsers: mockUsers.filter(u => u.is_active).length
-          }));
-        })
-        .finally(() => setLoadingUsers(false));
-    } else {
-      setUsers(mockUsers);
-      setAnalytics(prev => ({
-        ...prev,
-        totalUsers: mockUsers.length,
-        activeUsers: mockUsers.filter(u => u.is_active).length
-      }));
-      setLoadingUsers(false);
-    }
-    */
+      .catch((err: Error) => {
+        if (cancelled) return;
+        console.error('Failed to fetch users:', err);
+        // Seed the screen with sample rows in local dev only. In any real
+        // environment an empty list is shown, so a backend outage is visible
+        // rather than being papered over with fabricated numbers.
+        const fallback = mockAuthEnabled ? SAMPLE_USERS : [];
+        setUsers(fallback);
+        setLoadError(mockAuthEnabled ? '' : 'Could not load data from the server.');
+        setAnalytics(prev => ({
+          ...prev,
+          totalUsers: fallback.length,
+          activeUsers: fallback.filter(u => u.is_active).length
+        }));
+      })
+      .finally(() => { if (!cancelled) setLoadingUsers(false); });
+    return () => { cancelled = true; };
   }, []);
 
   // Fetch vehicles
   useEffect(() => {
+    let cancelled = false;
     setLoadingVehicles(true);
-    // For now, use mock data since we don't have proper authentication set up
-    const mockVehicles = [
-      { _id: '507f1f77bcf86cd799439021', plate_number: 'ABC123', make: 'Toyota', model: 'Camry', color: 'White', owner_id: '507f1f77bcf86cd799439013' },
-      { _id: '507f1f77bcf86cd799439022', plate_number: 'XYZ789', make: 'Honda', model: 'Civic', color: 'Blue', owner_id: '507f1f77bcf86cd799439013' },
-      { _id: '507f1f77bcf86cd799439023', plate_number: 'DEF456', make: 'Ford', model: 'Focus', color: 'Red', owner_id: '507f1f77bcf86cd799439014' },
-      { _id: '507f1f77bcf86cd799439024', plate_number: 'GHI789', make: 'BMW', model: 'X3', color: 'Black', owner_id: '507f1f77bcf86cd799439015' },
-      { _id: '507f1f77bcf86cd799439025', plate_number: 'JKL012', make: 'Mercedes', model: 'C-Class', color: 'Silver', owner_id: '507f1f77bcf86cd799439011' }
-    ];
-    setVehicles(mockVehicles);
-    setAnalytics(prev => ({
-      ...prev,
-      totalVehicles: mockVehicles.length
-    }));
-    setLoadingVehicles(false);
-    
-    // Uncomment this when you have proper authentication set up
-    /*
-    const token = localStorage.getItem('token');
-    if (token) {
-      api.get('/vehicles', {
-        headers: { 'Authorization': `Bearer ${token}` }
+    api.get('/vehicles')
+      .then((res) => {
+        if (cancelled) return;
+        const vehicleData = asArray<Vehicle>(res.data);
+        setVehicles(vehicleData);
+        setAnalytics(prev => ({ ...prev, totalVehicles: vehicleData.length }));
       })
-        .then((res: { data: Vehicle[] }) => {
-          const vehicleData = res.data || [];
-          setVehicles(vehicleData);
-          setAnalytics(prev => ({
-            ...prev,
-            totalVehicles: vehicleData.length
-          }));
-        })
-        .catch((err: Error) => {
-          console.error('Failed to fetch vehicles:', err);
-          // Use mock data as fallback
-          setVehicles(mockVehicles);
-          setAnalytics(prev => ({
-            ...prev,
-            totalVehicles: mockVehicles.length
-          }));
-        })
-        .finally(() => setLoadingVehicles(false));
-    } else {
-      setVehicles(mockVehicles);
-      setAnalytics(prev => ({
-        ...prev,
-        totalVehicles: mockVehicles.length
-      }));
-      setLoadingVehicles(false);
-    }
-    */
+      .catch((err: Error) => {
+        if (cancelled) return;
+        console.error('Failed to fetch vehicles:', err);
+        const fallback = mockAuthEnabled ? SAMPLE_VEHICLES : [];
+        setVehicles(fallback);
+        setAnalytics(prev => ({ ...prev, totalVehicles: fallback.length }));
+      })
+      .finally(() => { if (!cancelled) setLoadingVehicles(false); });
+    return () => { cancelled = true; };
   }, []);
 
-  // Fetch logs
+  // Fetch access logs
   useEffect(() => {
+    let cancelled = false;
     setLoadingLogs(true);
-    // For now, use mock data since we don't have proper authentication set up
-    const mockLogs = [
-      { _id: '507f1f77bcf86cd799439031', plate_number: 'ABC123', timestamp: '2024-01-15T10:30:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439021' },
-      { _id: '507f1f77bcf86cd799439032', plate_number: 'XYZ789', timestamp: '2024-01-15T11:45:00Z', action: 'Exit', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439022' },
-      { _id: '507f1f77bcf86cd799439033', plate_number: 'DEF456', timestamp: '2024-01-15T14:20:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439023' },
-      { _id: '507f1f77bcf86cd799439034', plate_number: 'GHI789', timestamp: '2024-01-15T16:15:00Z', action: 'Entry', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439024' },
-      { _id: '507f1f77bcf86cd799439035', plate_number: 'JKL012', timestamp: '2024-01-15T18:30:00Z', action: 'Exit', user_id: '507f1f77bcf86cd799439012', vehicle_id: '507f1f77bcf86cd799439025' }
-    ];
-    setLogs(mockLogs);
-    setAnalytics(prev => ({
-      ...prev,
-      totalLogs: mockLogs.length,
-      monthlyAlerts: mockLogs.length
-    }));
-    setLoadingLogs(false);
-    
-    // Uncomment this when you have proper authentication set up
-    /*
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Note: You'll need to create a logs endpoint in your backend
-      api.get('/logs', {
-        headers: { 'Authorization': `Bearer ${token}` }
+    api.get('/logs')
+      .then((res) => {
+        if (cancelled) return;
+        const logData = asArray<Log>(res.data);
+        setLogs(logData);
+        setAnalytics(prev => ({
+          ...prev,
+          totalLogs: logData.length,
+          monthlyAlerts: logData.filter(log => {
+            const logDate = new Date(log.timestamp);
+            const now = new Date();
+            return logDate.getMonth() === now.getMonth()
+              && logDate.getFullYear() === now.getFullYear();
+          }).length
+        }));
       })
-        .then((res: { data: Log[] }) => {
-          const logData = res.data || [];
-          setLogs(logData);
-          setAnalytics(prev => ({
-            ...prev,
-            totalLogs: logData.length,
-            monthlyAlerts: logData.filter(log => {
-              const logDate = new Date(log.timestamp);
-              const now = new Date();
-              return logDate.getMonth() === now.getMonth() && logDate.getFullYear() === now.getFullYear();
-            }).length
-          }));
-        })
-        .catch((err: Error) => {
-          console.error('Failed to fetch logs:', err);
-          // Use mock data as fallback
-          setLogs(mockLogs);
-          setAnalytics(prev => ({
-            ...prev,
-            totalLogs: mockLogs.length,
-            monthlyAlerts: mockLogs.length
-          }));
-        })
-        .finally(() => setLoadingLogs(false));
-    } else {
-      setLogs(mockLogs);
-      setAnalytics(prev => ({
-        ...prev,
-        totalLogs: mockLogs.length,
-        monthlyAlerts: mockLogs.length
-      }));
-      setLoadingLogs(false);
-    }
-    */
+      .catch((err: Error) => {
+        if (cancelled) return;
+        console.error('Failed to fetch logs:', err);
+        const fallback = mockAuthEnabled ? SAMPLE_LOGS : [];
+        setLogs(fallback);
+        setAnalytics(prev => ({
+          ...prev,
+          totalLogs: fallback.length,
+          monthlyAlerts: fallback.length
+        }));
+      })
+      .finally(() => { if (!cancelled) setLoadingLogs(false); });
+    return () => { cancelled = true; };
   }, []);
+
 
   // User CRUD
   const handleUserFormChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setUserForm({ ...userForm, [e.target.name]: e.target.value });
-  const openEditUser = (user: User) => { setEditingUser(user); setUserForm(user); onOpen(); };
-  const openCreateUser = () => { setEditingUser(null); setUserForm({ _id: '', full_name: '', email: '', password: '', role: 'guard' }); onOpen(); };
+  const openEditUser = (user: User) => { setEditingUser(user); const { id: _ignoredId, is_active: _ignoredActive, ...rest } = user; setUserForm({ ...rest, password: '' }); onOpen(); };
+  const openCreateUser = () => { setEditingUser(null); setUserForm({ full_name: '', email: '', password: '', role: 'guard' }); onOpen(); };
   const handleUserSubmit = async () => {
     try {
       if (editingUser) {
-        // Mock update - in real app, this would be an API call
-                const updatedUsers = users.map(u =>
-          u._id === editingUser._id 
-            ? { ...u, ...userForm }
-            : u
-        );
-        setUsers(updatedUsers);
-        toast({ title: 'User updated successfully', status: 'success' });
+        // Password changes are not part of this form; send only profile fields.
+        const { password: _unused, ...profile } = userForm;
+        const { data } = await api.patch<User>(`/users/${editingUser.id}`, profile);
+        setUsers(prev => prev.map(u => (u.id === editingUser.id ? data : u)));
+        toast({ title: 'User updated', status: 'success' });
       } else {
-        // Mock create - in real app, this would be an API call
-        const newUser = {
-          _id: (users.length + 1).toString(),
-          ...userForm,
-          is_active: true
-        };
-        setUsers([...users, newUser]);
-        toast({ title: 'User created successfully', status: 'success' });
+        const { data } = await api.post<User>('/users', userForm);
+        setUsers(prev => [...prev, data]);
+        toast({ title: 'User created', status: 'success' });
       }
       onClose();
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to save user', status: 'error' });
+      toast({ title: 'Error', description: apiMessage(error, 'Failed to save user'), status: 'error' });
     }
   };
   const handleUserDeactivate = async (id: string) => {
     try {
-      // Mock deactivate - in real app, this would be an API call
-      const updatedUsers = users.map(u => 
-        u._id === id 
-          ? { ...u, is_active: false }
-          : u
-      );
-      setUsers(updatedUsers);
-      toast({ title: 'User deactivated successfully', status: 'success' });
+      const { data } = await api.delete<User>(`/users/${id}`);
+      setUsers(prev => prev.map(u => (u.id === id ? data : u)));
+      toast({ title: 'User deactivated', status: 'success' });
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to deactivate user', status: 'error' });
+      toast({ title: 'Error', description: apiMessage(error, 'Failed to deactivate user'), status: 'error' });
     }
   };
 
   // Vehicle CRUD
   const handleVehicleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => setVehicleForm({ ...vehicleForm, [e.target.name]: e.target.value });
-  const openEditVehicle = (v: Vehicle) => { setEditingVehicle(v); setVehicleForm(v); onVehicleOpen(); };
-  const openCreateVehicle = () => { setEditingVehicle(null); setVehicleForm({ _id: '', plate_number: '', make: '', model: '', color: '', owner_id: '' }); onVehicleOpen(); };
+  const openEditVehicle = (v: Vehicle) => { setEditingVehicle(v); const { id: _ignoredId, ...rest } = v; setVehicleForm(rest); onVehicleOpen(); };
+  const openCreateVehicle = () => { setEditingVehicle(null); setVehicleForm({ plate_number: '', make: '', model: '', color: '', owner_id: '' }); onVehicleOpen(); };
   
   const handleVehicleSubmit = async () => {
     try {
       if (editingVehicle) {
-        // Mock update - in real app, this would be an API call
-        const updatedVehicles = vehicles.map(v => 
-          v._id === editingVehicle._id 
-            ? { ...v, ...vehicleForm }
-            : v
-        );
-        setVehicles(updatedVehicles);
-        toast({ title: 'Vehicle updated successfully', status: 'success' });
+        // The plate itself is immutable: changing it would silently rewrite the
+        // vehicle that historical access logs and alerts refer to.
+        const { plate_number: _plate, ...editable } = vehicleForm;
+        const { data } = await api.patch<Vehicle>(`/vehicles/${editingVehicle.id}`, editable);
+        setVehicles(prev => prev.map(v => (v.id === editingVehicle.id ? data : v)));
+        toast({ title: 'Vehicle updated', status: 'success' });
       } else {
-        // Mock create - in real app, this would be an API call
-        const newVehicle = {
-          _id: (vehicles.length + 1).toString(),
-          ...vehicleForm
+        const payload = {
+          ...vehicleForm,
+          owner_id: vehicleForm.owner_id || null,
         };
-        setVehicles([...vehicles, newVehicle]);
-        toast({ title: 'Vehicle created successfully', status: 'success' });
+        const { data } = await api.post<Vehicle>('/vehicles', payload);
+        setVehicles(prev => [...prev, data]);
+        toast({ title: 'Vehicle registered', status: 'success' });
       }
       onVehicleClose();
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to save vehicle', status: 'error' });
+      toast({ title: 'Error', description: apiMessage(error, 'Failed to save vehicle'), status: 'error' });
     }
   };
 
   const handleVehicleDelete = async (id: string) => {
     try {
-      // Mock delete - in real app, this would be an API call
-      const updatedVehicles = vehicles.filter(v => v._id !== id);
-      setVehicles(updatedVehicles);
-      toast({ title: 'Vehicle deleted successfully', status: 'success' });
+      await api.delete(`/vehicles/${id}`);
+      setVehicles(prev => prev.filter(v => v.id !== id));
+      toast({ title: 'Vehicle deleted', status: 'success' });
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to delete vehicle', status: 'error' });
+      toast({ title: 'Error', description: apiMessage(error, 'Failed to delete vehicle'), status: 'error' });
     }
   };
 
   // Security Settings Handlers
-  const handleSecuritySettingChange = (setting: string, value: any) => {
+  const handleSecuritySettingChange = (setting: string, value: string | number | boolean) => {
     setSecuritySettings(prev => ({
       ...prev,
       [setting]: value
@@ -647,6 +544,11 @@ const AdminDashboard: React.FC = () => {
               <Text color="gray.600">
                 System overview and management controls
               </Text>
+              {loadError && (
+                <Text color="red.500" fontSize="sm" fontWeight="medium">
+                  {loadError}
+                </Text>
+              )}
             </VStack>
             <HStack spacing={4}>
               <Button
@@ -712,13 +614,9 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.totalUsers}
+                  {analytics.totalUsers}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Total Users</StatLabel>
-                <HStack spacing={1}>
-                  <StatArrow type="increase" color="green.500" />
-                  <StatHelpText color="green.500" fontSize="xs">+12% this month</StatHelpText>
-                </HStack>
               </Stat>
             </VStack>
           </HStack>
@@ -755,13 +653,9 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.totalVehicles}
+                  {analytics.totalVehicles}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Registered Vehicles</StatLabel>
-                <HStack spacing={1}>
-                  <StatArrow type="increase" color="green.500" />
-                  <StatHelpText color="green.500" fontSize="xs">+8% this week</StatHelpText>
-                </HStack>
               </Stat>
             </VStack>
           </HStack>
@@ -798,13 +692,9 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.activeAlerts}
+                  {analytics.monthlyAlerts}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Active Alerts</StatLabel>
-                <HStack spacing={1}>
-                  <StatArrow type="decrease" color="green.500" />
-                  <StatHelpText color="green.500" fontSize="xs">-2 from yesterday</StatHelpText>
-                </HStack>
               </Stat>
             </VStack>
           </HStack>
@@ -841,10 +731,10 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.systemUptime}%
+                  {stats.systemUptime === null ? '—' : `${stats.systemUptime}%`}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">System Uptime</StatLabel>
-                <Progress value={stats.systemUptime} size="sm" colorScheme="blue" borderRadius="full" />
+                <Progress value={stats.systemUptime ?? 0} size="sm" colorScheme="blue" borderRadius="full" />
               </Stat>
             </VStack>
           </HStack>
@@ -881,13 +771,9 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.recentActivity}
+                  {analytics.totalLogs}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Recent Activities</StatLabel>
-                <HStack spacing={1}>
-                  <StatArrow type="increase" color="green.500" />
-                  <StatHelpText color="green.500" fontSize="xs">+15% today</StatHelpText>
-                </HStack>
               </Stat>
             </VStack>
           </HStack>
@@ -924,10 +810,10 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.securityScore}
+                  {stats.securityScore ?? '—'}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Security Score</StatLabel>
-                <Progress value={stats.securityScore} size="sm" colorScheme="orange" borderRadius="full" />
+                <Progress value={stats.securityScore ?? 0} size="sm" colorScheme="orange" borderRadius="full" />
               </Stat>
             </VStack>
           </HStack>
@@ -1186,7 +1072,7 @@ const AdminDashboard: React.FC = () => {
                   </Thead>
                   <Tbody>
                     {users.map(u => (
-                      <Tr key={u._id}>
+                      <Tr key={u.id}>
                         <Td fontWeight="medium">{u.full_name}</Td>
                         <Td>{u.email}</Td>
                         <Td>
@@ -1203,7 +1089,7 @@ const AdminDashboard: React.FC = () => {
                           <HStack spacing={2}>
                             <Button size="xs" onClick={() => openEditUser(u)}>Edit</Button>
                             {u.is_active && (
-                              <Button size="xs" colorScheme="red" onClick={() => handleUserDeactivate(u._id)}>
+                              <Button size="xs" colorScheme="red" onClick={() => handleUserDeactivate(u.id)}>
                                 Deactivate
                               </Button>
                             )}
@@ -1246,7 +1132,7 @@ const AdminDashboard: React.FC = () => {
                   </Thead>
                   <Tbody>
                     {vehicles.map(v => (
-                      <Tr key={v._id}>
+                      <Tr key={v.id}>
                         <Td fontWeight="bold">{v.plate_number}</Td>
                         <Td>{v.make}</Td>
                         <Td>{v.model}</Td>
@@ -1260,7 +1146,7 @@ const AdminDashboard: React.FC = () => {
                         <Td>
                           <HStack spacing={2}>
                             <Button size="xs" onClick={() => openEditVehicle(v)}>Edit</Button>
-                            <Button size="xs" colorScheme="red" onClick={() => handleVehicleDelete(v._id)}>
+                            <Button size="xs" colorScheme="red" onClick={() => handleVehicleDelete(v.id)}>
                               Delete
                             </Button>
                           </HStack>
@@ -1301,7 +1187,7 @@ const AdminDashboard: React.FC = () => {
                   </Thead>
                   <Tbody>
                     {logs.map(log => (
-                      <Tr key={log._id}>
+                      <Tr key={log.id}>
                         <Td fontWeight="bold">{log.plate_number}</Td>
                         <Td>
                           <Badge colorScheme={log.action === 'Entry' ? 'green' : 'red'} variant="subtle">

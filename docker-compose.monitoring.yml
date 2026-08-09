@@ -1,0 +1,54 @@
+# Monitoring stack, kept in its own file rather than behind a profile.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#
+# A profile would still force everyone to set GRAFANA_PASSWORD, because compose
+# interpolates every service regardless of which profiles are active. Splitting
+# the file keeps the main stack usable without monitoring configured.
+#
+# Neither service should be exposed publicly: Prometheus has no authentication
+# and its data describes your traffic in detail.
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanagerdata:/alertmanager
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD before starting the monitoring stack}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3030}:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  promdata:
+  grafanadata:
+  alertmanagerdata:

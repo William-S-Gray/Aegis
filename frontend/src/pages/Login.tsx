@@ -18,7 +18,8 @@ import {
   Icon
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { mockAuthEnabled } from '../config';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff, FiShield, FiUser, FiLock } from 'react-icons/fi';
 
 const Login: React.FC = () => {
@@ -29,12 +30,13 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const bgColor = useColorModeValue('gray.100', 'gray.800');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
+
     try {
       await login(email, password);
       toast({
@@ -43,13 +45,19 @@ const Login: React.FC = () => {
         duration: 3000,
         isClosable: true,
       });
-      navigate('/');
+      // Return the user to the page that sent them here, if any.
+      const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
+      navigate(from ?? '/', { replace: true });
     } catch (error) {
+      const description =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Please check your credentials and try again';
       toast({
         title: 'Login failed',
-        description: 'Please check your credentials',
+        description,
         status: 'error',
-        duration: 3000,
+        duration: 4000,
         isClosable: true,
       });
     } finally {
@@ -58,9 +66,9 @@ const Login: React.FC = () => {
   };
 
   const demoCredentials = [
-    { role: 'Admin', email: 'admin@aegis.com', password: 'admin123' },
-    { role: 'Guard', email: 'guard@aegis.com', password: 'guard123' },
-    { role: 'User', email: 'user@aegis.com', password: 'user123' },
+    { role: 'Admin', email: 'admin@aegis.example', password: 'admin123' },
+    { role: 'Guard', email: 'guard@aegis.example', password: 'guard123' },
+    { role: 'User', email: 'user@aegis.example', password: 'user123' },
   ];
 
   const fillDemoCredentials = (email: string, password: string) => {
@@ -201,11 +209,12 @@ const Login: React.FC = () => {
           </VStack>
         </form>
 
-        {/* Demo Credentials */}
+        {/* Demo credentials: only rendered when mock auth is explicitly enabled for local dev. */}
+        {mockAuthEnabled && (
         <VStack spacing={4} mt={8}>
           <Divider />
           <Text fontSize="sm" color="gray.600" fontWeight="medium">
-            Demo Credentials
+            Demo Credentials (development only)
           </Text>
           <VStack spacing={2} w="full">
             {demoCredentials.map((cred, index) => (
@@ -236,6 +245,7 @@ const Login: React.FC = () => {
             ))}
           </VStack>
         </VStack>
+        )}
       </Box>
     </Box>
   );

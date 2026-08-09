@@ -1,13 +1,14 @@
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add request interceptor to include auth token
+// Attach the bearer token to every outgoing request.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -16,16 +17,36 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Add response interceptor to handle auth errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    /*
+     * A single-page-app host answers unknown paths with index.html and HTTP 200.
+     * Without this guard that HTML string flows into components as if it were
+     * data — which is exactly how the analytics page used to white-screen
+     * ("data.map is not a function" inside recharts). Treat it as an error.
+     */
+    const contentType = String(response.headers?.['content-type'] ?? '');
+    if (contentType.includes('text/html')) {
+      return Promise.reject(
+        new Error(
+          `Expected JSON from ${response.config?.url ?? 'the API'} but received HTML. ` +
+            'The API base URL is probably misconfigured or the backend is not running.'
+        )
+      );
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      localStorage.removeItem('user');
+      // Preserve where the user was so they can be returned after signing in.
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
     }
     return Promise.reject(error);
   }
 );
 
-export default api; 
+export default api;

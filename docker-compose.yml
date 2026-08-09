@@ -1,0 +1,138 @@
+# Full stack. For local development against the host-run servers, use
+# backend/api_server/docker-compose.yml instead — that starts only PostgreSQL
+# and Redis.
+#
+#   cp .env.example .env      # set SECRET_KEY and the passwords
+#   docker compose up -d --build
+#   docker compose run --rm migrate
+#
+# Ports are offset from the usual defaults to avoid colliding with anything
+# already running on the host.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aegis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-aegis}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aegis} -d ${POSTGRES_DB:-aegis}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # Shared login throttling and WebSocket tickets across API replicas.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend/api_server
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-aegis}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-true}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+    ports:
+      - "${API_PORT:-8081}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # One-shot migration runner. Kept separate from the API so several replicas
+  # cannot race to migrate the same database on startup.
+  migrate:
+    build:
+      context: ./backend/api_server
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-aegis}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+    restart: "no"
+
+  # Data-retention purge. Run on a schedule (cron/systemd timer/k8s CronJob):
+  #     docker compose --profile tools run --rm purge
+  # Add --dry-run to the command to preview without deleting.
+  purge:
+    build:
+      context: ./backend/api_server
+    command: ["python", "-m", "app.cli", "purge"]
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-aegis}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+      RETENTION_AUDIT_LOG_DAYS: ${RETENTION_AUDIT_LOG_DAYS:-730}
+      RETENTION_ACCESS_LOG_DAYS: ${RETENTION_ACCESS_LOG_DAYS:-365}
+      RETENTION_ALERT_DAYS: ${RETENTION_ALERT_DAYS:-365}
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+    restart: "no"
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      # Resolved at container start into config.js, so this image is not tied
+      # to a single environment.
+      API_URL: ${PUBLIC_API_URL:-http://localhost:8081/api/v1}
+      MEDIA_URL: ${PUBLIC_MEDIA_URL:-http://localhost:8081}
+      ENABLE_MOCK_AUTH: "false"
+    ports:
+      - "${FRONTEND_PORT:-8080}:8080"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  vision:
+    build:
+      context: ./backend/vision_service
+      args:
+        # Flip to "true" once you have plate weights; adds ~3 GB.
+        INCLUDE_ML: ${INCLUDE_ML:-false}
+    environment:
+      VISION_ENVIRONMENT: ${ENVIRONMENT:-development}
+      VISION_API_URL: http://api:8000/api/v1
+      VISION_SERVICE_EMAIL: ${VISION_SERVICE_EMAIL:-vision@aegis.example}
+      VISION_SERVICE_PASSWORD: ${VISION_SERVICE_PASSWORD:?VISION_SERVICE_PASSWORD is required}
+      VISION_DETECTOR: ${VISION_DETECTOR:-stub}
+      VISION_READER: ${VISION_READER:-stub}
+      VISION_MODEL_PATH: ${VISION_MODEL_PATH:-}
+      VISION_SOURCES: ${VISION_SOURCES:-/data/samples}
+      VISION_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      VISION_LOG_JSON: ${LOG_JSON:-true}
+    volumes:
+      - ${VISION_DATA_DIR:-./backend/vision_service/samples}:/data/samples:ro
+    depends_on:
+      - api
+    # Opt-in: the service account must exist before this can authenticate.
+    profiles: ["vision"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:

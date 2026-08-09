@@ -1,59 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { Box, Heading, Stat, StatLabel, StatNumber, SimpleGrid, Table, Thead, Tbody, Tr, Th, Td, Progress, Input, Button, HStack, Select, Spinner, Alert } from "@chakra-ui/react";
-import axios from "axios";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend, Scatter } from "recharts";
+import { Box, Heading, Stat, StatLabel, StatNumber, SimpleGrid, Progress, Input, Button, HStack, Select, Spinner, Alert } from "@chakra-ui/react";
+import api from "../api";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import { useAuth } from "../context/AuthContext";
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
+import { asArray, asObject, asNumber } from "../utils/safe";
+import { exportCSV, exportExcel, exportPDF, formatDate } from "../utils/exporters";
 
 const FEEDBACK_COLORS = ["#f6ad55", "#4299e1", "#f56565"];
 
-function exportCSV(data, filename, columns, dateFormat) {
-  if (!data.length) return;
-  const header = columns.map(c => c.label).join(",");
-  const rows = data.map(row => columns.map(c => c.key === "date" ? formatDate(row[c.key], dateFormat) : row[c.key]).join(","));
-  const csv = [header].concat(rows).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  window.URL.revokeObjectURL(url);
-}
+const MISMATCH_COLUMNS = [{ key: "date", label: "Date" }, { key: "count", label: "Count" }];
+const COMMON_COLUMNS = [{ key: "type", label: "Type" }, { key: "count", label: "Count" }];
 
-function exportExcel(data, filename, columns, dateFormat) {
-  if (!data.length) return;
-  const rows = data.map(row => {
-    const obj = {};
-    columns.forEach(c => {
-      obj[c.label] = c.key === "date" ? formatDate(row[c.key], dateFormat) : row[c.key];
-    });
-    return obj;
-  });
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Analytics");
-  XLSX.writeFile(wb, filename);
-}
-
-function exportPDF(data, filename, columns, dateFormat) {
-  if (!data.length) return;
-  const doc = new jsPDF();
-  doc.autoTable({
-    head: [columns.map(c => c.label)],
-    body: data.map(a => columns.map(c => c.key === "date" ? formatDate(a[c.key], dateFormat) : a[c.key]))
-  });
-  doc.save(filename);
-}
-
-function formatDate(date, format) {
-  const d = new Date(date);
-  if (format === "date") return d.toLocaleDateString();
-  if (format === "time") return d.toLocaleTimeString();
-  return d.toLocaleString();
-}
+// Only the "date" column needs date formatting; everything else is passed through.
+const formatCell = (row, column) =>
+  column.key === "date" ? formatDate(row[column.key]) : String(row[column.key] ?? "");
 
 export default function AdminAnalytics() {
   const { user } = useAuth();
@@ -72,7 +32,9 @@ export default function AdminAnalytics() {
 
   useEffect(() => {
     if (user?.role === "admin") {
-      axios.get("/api/v1/sites").then(res => setSites(res.data));
+      api.get("/sites")
+        .then(res => setSites(asArray(res.data)))
+        .catch(() => setSites([]));
     }
   }, [user]);
 
@@ -85,21 +47,28 @@ export default function AdminAnalytics() {
       if (dateTo) params.to = dateTo;
       if (siteId) params.site_id = siteId;
       const [mismatchRes, commonRes, confRes, feedbackRes, timeRes, escRes] = await Promise.all([
-        axios.get("/api/v1/analytics/mismatches", { params }),
-        axios.get("/api/v1/analytics/common-mismatches", { params }),
-        axios.get("/api/v1/analytics/average-confidence", { params }),
-        axios.get("/api/v1/analytics/feedback-stats", { params }),
-        axios.get("/api/v1/analytics/time-to-resolution", { params }),
-        axios.get("/api/v1/analytics/escalation-rate", { params })
+        api.get("/analytics/mismatches", { params }),
+        api.get("/analytics/common-mismatches", { params }),
+        api.get("/analytics/average-confidence", { params }),
+        api.get("/analytics/feedback-stats", { params }),
+        api.get("/analytics/time-to-resolution", { params }),
+        api.get("/analytics/escalation-rate", { params })
       ]);
-      setMismatches(mismatchRes.data);
-      setCommon(commonRes.data);
-      setConfidence(confRes.data);
-      setFeedback(feedbackRes.data);
-      setTimeToResolution(timeRes.data.average_time_to_resolution_minutes);
-      setEscalationRate(escRes.data.escalation_rate_percent);
+      // Coerce every value: charts throw on a non-array and take the page down.
+      setMismatches(asArray(mismatchRes.data));
+      setCommon(asArray(commonRes.data));
+      setConfidence(asObject(confRes.data));
+      setFeedback(asObject(feedbackRes.data));
+      setTimeToResolution(asNumber(asObject(timeRes.data).average_time_to_resolution_minutes));
+      setEscalationRate(asNumber(asObject(escRes.data).escalation_rate_percent));
     } catch (err) {
-      setError("Failed to load analytics");
+      setMismatches([]);
+      setCommon([]);
+      setConfidence({});
+      setFeedback({});
+      setTimeToResolution(0);
+      setEscalationRate(0);
+      setError(err?.message || "Failed to load analytics");
     }
     setLoading(false);
   };
@@ -109,10 +78,13 @@ export default function AdminAnalytics() {
     // eslint-disable-next-line
   }, [siteId]);
 
+  const plateConfidence = asNumber(confidence.average_plate_confidence);
+  const typeConfidence = asNumber(confidence.average_type_confidence);
+
   const feedbackData = [
-    { name: "False Alarms", value: feedback.false_alarms || 0 },
-    { name: "Investigated", value: feedback.investigated || 0 },
-    { name: "Escalated", value: feedback.escalated || 0 }
+    { name: "False Alarms", value: asNumber(feedback.false_alarms) },
+    { name: "Investigated", value: asNumber(feedback.investigated) },
+    { name: "Escalated", value: asNumber(feedback.escalated) }
   ];
 
   return (
@@ -127,25 +99,25 @@ export default function AdminAnalytics() {
         <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="From" width="150px" />
         <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="To" width="150px" />
         <Button colorScheme="blue" onClick={fetchAnalytics}>Filter</Button>
-        <Button colorScheme="green" onClick={() => exportCSV(mismatches, "mismatches.csv", [{key: "date", label: "Date"}, {key: "count", label: "Count"}], "date")}>Export Mismatches CSV</Button>
-        <Button colorScheme="green" onClick={() => exportCSV(common, "common_mismatches.csv", [{key: "type", label: "Type"}, {key: "count", label: "Count"}], "date")}>Export Common CSV</Button>
-        <Button colorScheme="green" onClick={() => exportExcel(mismatches, "mismatches.xlsx", [{key: "date", label: "Date"}, {key: "count", label: "Count"}], "date")}>Export Mismatches Excel</Button>
-        <Button colorScheme="green" onClick={() => exportExcel(common, "common_mismatches.xlsx", [{key: "type", label: "Type"}, {key: "count", label: "Count"}], "date")}>Export Common Excel</Button>
-        <Button colorScheme="green" onClick={() => exportPDF(mismatches, "mismatches.pdf", [{key: "date", label: "Date"}, {key: "count", label: "Count"}], "date")}>Export Mismatches PDF</Button>
-        <Button colorScheme="green" onClick={() => exportPDF(common, "common_mismatches.pdf", [{key: "type", label: "Type"}, {key: "count", label: "Count"}], "date")}>Export Common PDF</Button>
+        <Button colorScheme="green" onClick={() => exportCSV(mismatches, "mismatches.csv", MISMATCH_COLUMNS, formatCell)}>Export Mismatches CSV</Button>
+        <Button colorScheme="green" onClick={() => exportCSV(common, "common_mismatches.csv", COMMON_COLUMNS, formatCell)}>Export Common CSV</Button>
+        <Button colorScheme="green" onClick={() => exportExcel(mismatches, "mismatches.xlsx", MISMATCH_COLUMNS, "Mismatches", formatCell)}>Export Mismatches Excel</Button>
+        <Button colorScheme="green" onClick={() => exportExcel(common, "common_mismatches.xlsx", COMMON_COLUMNS, "Common Mismatches", formatCell)}>Export Common Excel</Button>
+        <Button colorScheme="green" onClick={() => exportPDF(mismatches, "mismatches.pdf", MISMATCH_COLUMNS, formatCell)}>Export Mismatches PDF</Button>
+        <Button colorScheme="green" onClick={() => exportPDF(common, "common_mismatches.pdf", COMMON_COLUMNS, formatCell)}>Export Common PDF</Button>
       </HStack>
       {loading && <Spinner mt={4} />}
       {error && <Alert status="error" mb={4}>{error}</Alert>}
       <SimpleGrid columns={2} spacing={6} mb={6}>
         <Stat>
           <StatLabel>Avg Plate Confidence</StatLabel>
-          <StatNumber>{confidence.average_plate_confidence}</StatNumber>
-          <Progress value={confidence.average_plate_confidence * 100} size="sm" colorScheme="blue" />
+          <StatNumber>{plateConfidence ? plateConfidence.toFixed(2) : "—"}</StatNumber>
+          <Progress value={plateConfidence * 100} size="sm" colorScheme="blue" />
         </Stat>
         <Stat>
           <StatLabel>Avg Type Confidence</StatLabel>
-          <StatNumber>{confidence.average_type_confidence}</StatNumber>
-          <Progress value={confidence.average_type_confidence * 100} size="sm" colorScheme="green" />
+          <StatNumber>{typeConfidence ? typeConfidence.toFixed(2) : "—"}</StatNumber>
+          <Progress value={typeConfidence * 100} size="sm" colorScheme="green" />
         </Stat>
         <Stat>
           <StatLabel>Avg Time to Resolution (min)</StatLabel>

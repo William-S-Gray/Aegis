@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Button, Select, Input, useToast } from "@chakra-ui/react";
-import axios from "axios";
+import api from "../api";
+import { asArray } from "../utils/safe";
 
 const ATTRIBUTES = ["type", "color"];
 
@@ -11,31 +12,44 @@ export default function AdminAttributeRules() {
   const [pair2, setPair2] = useState("");
   const toast = useToast();
 
+  const fetchRules = useCallback(async () => {
+    try {
+      const res = await api.get("/attribute-mismatch-rules");
+      setRules(asArray(res.data));
+    } catch (err) {
+      setRules([]);
+      toast({ title: "Failed to load rules", status: "error" });
+    }
+  }, [toast]);
+
   useEffect(() => {
     fetchRules();
-  }, []);
-
-  const fetchRules = async () => {
-    const res = await axios.get("/api/v1/attribute-mismatch-rules");
-    setRules(res.data);
-  };
+  }, [fetchRules]);
 
   const addRule = async () => {
     if (!pair1 || !pair2) return;
-    await axios.post("/api/v1/attribute-mismatch-rules", {
-      attribute,
-      allowed_pair: [pair1, pair2],
-    });
-    setPair1("");
-    setPair2("");
-    fetchRules();
-    toast({ title: "Rule added", status: "success" });
+    try {
+      await api.post("/attribute-mismatch-rules", {
+        attribute,
+        allowed_pair: [pair1, pair2],
+      });
+      setPair1("");
+      setPair2("");
+      fetchRules();
+      toast({ title: "Rule added", status: "success" });
+    } catch (err) {
+      toast({ title: "Failed to add rule", status: "error" });
+    }
   };
 
   const deleteRule = async (id) => {
-    await axios.delete(`/api/v1/attribute-mismatch-rules/${id}`);
-    fetchRules();
-    toast({ title: "Rule deleted", status: "info" });
+    try {
+      await api.delete(`/attribute-mismatch-rules/${id}`);
+      fetchRules();
+      toast({ title: "Rule deleted", status: "info" });
+    } catch (err) {
+      toast({ title: "Failed to delete rule", status: "error" });
+    }
   };
 
   return (

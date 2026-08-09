@@ -1,0 +1,259 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API server
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aegis
+          POSTGRES_PASSWORD: aegis
+          POSTGRES_DB: aegis_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U aegis -d aegis_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend/api_server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/api_server/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      # The suite runs on SQLite; Redis is exercised for real so the shared
+      # store is covered by the same contract tests as the in-memory one.
+      - name: Tests (in-memory store)
+        run: python -m pytest -q
+
+      - name: Tests (Redis-backed store)
+        env:
+          REDIS_URL: redis://localhost:6379/1
+          TEST_REDIS_URL: redis://localhost:6379/0
+        run: python -m pytest -q
+
+      # A backup nobody has restored is not a backup. This proves the dump
+      # and restore path works against a real PostgreSQL, every push.
+      - name: Backup restores cleanly
+        env:
+          PGPASSWORD: aegis
+          DATABASE_URL: postgresql+psycopg://aegis:aegis@localhost:5432/aegis_test
+          SECRET_KEY: ci-only-not-a-real-secret
+        run: |
+          alembic upgrade head
+          AEGIS_PASSWORD=ci-only-password-long python -m app.cli create-user \
+            --email ci@aegis.example --name CI --role admin
+          ../../scripts/backup.sh ./ci-backups
+          VERIFY_ADMIN_URL=postgresql://aegis:aegis@localhost:5432/postgres \
+            ../../scripts/verify-backup.sh ./ci-backups/*.dump
+
+      # Catches a model change that was never captured in a migration.
+      - name: Migrations apply cleanly and match the models
+        env:
+          DATABASE_URL: postgresql+psycopg://aegis:aegis@localhost:5432/aegis_test
+          SECRET_KEY: ci-only-not-a-real-secret
+        run: |
+          alembic upgrade head
+          alembic check
+
+  observability:
+    name: Observability smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/api_server
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/api_server/requirements.txt
+      - run: pip install -r requirements.txt
+
+      # Guards the log contract: a malformed line breaks ingestion silently,
+      # and a leaked credential is not something to discover in production.
+      - name: Logs are valid JSON, correlated, and free of credentials
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
+        run: |
+          python - <<'PY'
+          import json, logging, io
+          from app.core.logging import JsonFormatter, new_log_context, bind_log_context
+
+          stream = io.StringIO()
+          handler = logging.StreamHandler(stream)
+          handler.setFormatter(JsonFormatter())
+          log = logging.getLogger("ci"); log.addHandler(handler); log.setLevel("INFO")
+
+          new_log_context(); bind_log_context(request_id="r1", actor_id="u1")
+          log.info("hello", extra={"password": "hunter2", "route": "/x"})
+
+          line = stream.getvalue().strip()
+          payload = json.loads(line)          # must parse
+          assert payload["request_id"] == "r1", payload
+          assert payload["actor_id"] == "u1", payload
+          assert "hunter2" not in line, "credential leaked into logs"
+          print("log contract OK")
+          PY
+
+  monitoring:
+    name: Monitoring config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A typo in an alert rule means it silently never fires, which is worse
+      # than having no rule at all.
+      - name: Validate Prometheus rules and scrape config
+        run: |
+          docker run --rm -v "$PWD/monitoring:/cfg:ro" \
+            --entrypoint promtool prom/prometheus:v3.1.0 check rules /cfg/alerts.yml
+          sed 's|\\development|ci|' monitoring/prometheus.yml > /tmp/prometheus.yml
+          sed -i 's|/etc/prometheus/alerts.yml|/cfg/alerts.yml|' /tmp/prometheus.yml
+          cp /tmp/prometheus.yml monitoring/.ci-prometheus.yml
+          docker run --rm -v "$PWD/monitoring:/cfg:ro" \
+            --entrypoint promtool prom/prometheus:v3.1.0 check config /cfg/.ci-prometheus.yml
+          rm -f monitoring/.ci-prometheus.yml
+
+      - name: Validate Alertmanager routing
+        run: |
+          sed 's|\\\(.*\)|\1|' monitoring/alertmanager.yml > monitoring/.ci-alertmanager.yml
+          docker run --rm -v "$PWD/monitoring:/cfg:ro" \
+            --entrypoint amtool prom/alertmanager:v0.28.0 check-config /cfg/.ci-alertmanager.yml
+          rm -f monitoring/.ci-alertmanager.yml
+
+      - name: Grafana dashboard is valid JSON
+        run: python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('monitoring/grafana/dashboards/*.json')]; print('dashboards OK')"
+
+  vision:
+    name: Vision service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/vision_service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/vision_service/requirements.txt
+
+      # Deliberately without the ML extras: the pipeline must stay testable
+      # without a 3 GB download.
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Advisory: fails the job on high/critical so regressions surface, but
+      # does not block on the moderate transitive noise.
+      - name: npm audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  images:
+    name: Container images
+    runs-on: ubuntu-latest
+    needs: [api, vision, frontend]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            context: backend/api_server
+          - name: vision
+            context: backend/vision_service
+          - name: frontend
+            context: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # Build only — publishing needs a registry and credentials, which are a
+      # deployment decision rather than a CI one.
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: false
+          load: true
+          tags: aegis-${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Image runs as a non-root user
+        if: matrix.name != 'frontend'
+        run: |
+          user=$(docker run --rm --entrypoint sh aegis-${{ matrix.name }}:${{ github.sha }} -c 'id -u')
+          echo "uid=$user"
+          test "$user" != "0"

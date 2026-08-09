@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+dev-dist/
+build/
+*.local
+
+# Test/coverage artifacts
+coverage/
+.vitest/
+
+# Environment: committed defaults are fine, machine-local overrides are not
+.env.local
+.env.*.local
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.swp
+
+# Backend
+backend/*/.venv/
+backend/*/.env
+backend/vision_service/samples/
+backend/vision_service/*.pt
+
+# Root compose environment
+/.env
+
+# Backup artefacts
+backups/
+*.dump
+*.dump.sha256

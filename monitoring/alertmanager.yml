@@ -1,0 +1,73 @@
+# Alertmanager routing.
+#
+# Prometheus evaluating rules is only half the job: without this, a firing
+# alert is a red row in a web UI nobody is looking at.
+#
+# Receivers below are placeholders. Fill in ONE before relying on this, and
+# send a test alert (see docs/operations.md) — an untested paging path is
+# discovered at the worst possible moment.
+
+global:
+  resolve_timeout: 5m
+
+# Deliberately conservative grouping: alerts for the same service arrive as one
+# notification rather than one message per rule, which is how a paging channel
+# becomes something people mute.
+route:
+  group_by: ["alertname", "service"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: default
+
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: critical
+      # Page fast, and keep reminding: these mean gates are not working.
+      group_wait: 10s
+      repeat_interval: 1h
+
+    - matchers:
+        - severity = "warning"
+      receiver: warnings
+      # Warnings are for working hours, not 03:00.
+      repeat_interval: 12h
+
+# Do not page twice for one fault. If the API is down, its error rate and
+# latency are consequences, not separate incidents.
+inhibit_rules:
+  - source_matchers:
+      - alertname = "AegisApiDown"
+    target_matchers:
+      - severity =~ "warning|critical"
+    equal: ["service"]
+
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ["alertname"]
+
+receivers:
+  - name: default
+
+  - name: critical
+    # Replace with your on-call integration. Examples:
+    #
+    # pagerduty_configs:
+    #   - routing_key: <integration-key>
+    #
+    # slack_configs:
+    #   - api_url: <webhook-url>
+    #     channel: "#aegis-alerts"
+    #     title: '{{ .CommonAnnotations.summary }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+    webhook_configs:
+      - url: ${ALERT_WEBHOOK_URL:-http://alert-sink:9099/critical}
+        send_resolved: true
+
+  - name: warnings
+    webhook_configs:
+      - url: ${ALERT_WEBHOOK_URL:-http://alert-sink:9099/warning}
+        send_resolved: true

@@ -1,0 +1,36 @@
+# Local development database.
+#
+# Port 5435 is used deliberately so this does not collide with a PostgreSQL
+# instance already listening on the host's default 5432.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: aegis-postgres
+    environment:
+      POSTGRES_USER: aegis
+      POSTGRES_PASSWORD: aegis
+      POSTGRES_DB: aegis
+    ports:
+      - "5435:5432"
+    volumes:
+      - aegis_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis -d aegis"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: aegis-redis
+    # Shared state across API replicas: login throttling and WebSocket tickets.
+    ports:
+      - "6383:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  aegis_pgdata:
