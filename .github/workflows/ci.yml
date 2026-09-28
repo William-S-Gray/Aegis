@@ -160,10 +160,9 @@ jobs:
 
       - name: Validate Alertmanager routing
         run: |
-          sed 's|\\\(.*\)|\1|' monitoring/alertmanager.yml > monitoring/.ci-alertmanager.yml
+          # Checked as shipped: Alertmanager loads this file verbatim.
           docker run --rm -v "$PWD/monitoring:/cfg:ro" \
-            --entrypoint amtool prom/alertmanager:v0.28.0 check-config /cfg/.ci-alertmanager.yml
-          rm -f monitoring/.ci-alertmanager.yml
+            --entrypoint amtool prom/alertmanager:v0.28.0 check-config /cfg/alertmanager.yml
 
       # Unset ENVIRONMENT must mean production for every service. The vision
       # service once defaulted to development, which let the stub detector

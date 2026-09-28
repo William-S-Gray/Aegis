@@ -6,6 +6,10 @@
 # Receivers below are placeholders. Fill in ONE before relying on this, and
 # send a test alert (see docs/operations.md) — an untested paging path is
 # discovered at the worst possible moment.
+#
+# Edit the URLs here: Alertmanager does not expand environment variables in
+# this file, so a ${VAR} placeholder is read literally and the config fails
+# to load.
 
 global:
   resolve_timeout: 5m
@@ -64,10 +68,10 @@ receivers:
     #     title: '{{ .CommonAnnotations.summary }}'
     #     text: '{{ .CommonAnnotations.description }}'
     webhook_configs:
-      - url: ${ALERT_WEBHOOK_URL:-http://alert-sink:9099/critical}
+      - url: http://alert-sink:9099/critical
         send_resolved: true
 
   - name: warnings
     webhook_configs:
-      - url: ${ALERT_WEBHOOK_URL:-http://alert-sink:9099/warning}
+      - url: http://alert-sink:9099/warning
         send_resolved: true
