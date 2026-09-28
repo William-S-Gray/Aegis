@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
-
 import math
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import audit
@@ -25,12 +25,21 @@ def list_logs(
 ) -> AccessLogPage:
     """
     Access history, newest first. A plain user sees only entries for vehicles
-    they own.
+    they own, and only from when they became the owner.
     """
     filters = []
     if current_user.role == Role.USER:
-        owned = select(Vehicle.plate_number).where(Vehicle.owner_id == current_user.id)
-        filters.append(AccessLog.plate_number.in_(owned))
+        # Scoped by vehicle and ownership period, not by plate text: a
+        # transferred plate's earlier history belongs to its previous owner.
+        filters.append(
+            select(Vehicle.id)
+            .where(
+                Vehicle.id == AccessLog.vehicle_id,
+                Vehicle.owner_id == current_user.id,
+                AccessLog.timestamp >= Vehicle.owner_since,
+            )
+            .exists()
+        )
 
     total = db.scalar(select(func.count()).select_from(AccessLog).where(*filters)) or 0
 
@@ -78,8 +87,14 @@ def create_access_log(
 
     The frontend queues these in IndexedDB while offline and replays them on
     reconnect, so `timestamp` may be older than the insertion time; both are
-    stored.
+    stored. A replay carrying an already-recorded `client_ref` returns the
+    original entry instead of recording the decision twice.
     """
+    if payload.client_ref is not None:
+        existing = _by_client_ref(db, payload)
+        if existing is not None:
+            return existing
+
     normalized = normalize_plate(payload.plate_number)
     vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == normalized))
 
@@ -91,9 +106,18 @@ def create_access_log(
         vehicle_id=vehicle.id if vehicle else None,
         site_id=payload.site_id or (vehicle.site_id if vehicle else None),
         details=payload.details,
+        client_ref=payload.client_ref,
     )
     db.add(entry)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # A concurrent replay of the same decision won the insert.
+        db.rollback()
+        existing = _by_client_ref(db, payload) if payload.client_ref else None
+        if existing is None:
+            raise
+        return existing
 
     audit.record(
         db,
@@ -108,3 +132,7 @@ def create_access_log(
     db.commit()
     db.refresh(entry)
     return entry
+
+
+def _by_client_ref(db: Session, payload: AccessLogCreate) -> AccessLog | None:
+    return db.scalar(select(AccessLog).where(AccessLog.client_ref == payload.client_ref))

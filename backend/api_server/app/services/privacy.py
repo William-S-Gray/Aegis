@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -9,7 +10,15 @@ from typing import Any
 from sqlalchemy import Text, cast, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import AccessLog, Alert, AuditLog, User, Vehicle, normalize_plate
+from app.models import (
+    AccessLog,
+    Alert,
+    AlertComment,
+    AuditLog,
+    User,
+    Vehicle,
+    normalize_plate,
+)
 
 logger = logging.getLogger("aegis.privacy")
 
@@ -29,6 +38,41 @@ def _tombstone() -> str:
     being irreversible.
     """
     return f"{ERASURE_PREFIX}{secrets.token_hex(8).upper()}"
+
+
+def _subject(plate: str) -> str:
+    """
+    The normalised plate, refusing one that normalises to nothing.
+
+    An empty needle matches everything: every audit row would be "about" the
+    subject, and scrubbing "" would splice the tombstone between every
+    character of every string in the table.
+    """
+    normalized = normalize_plate(plate)
+    if not normalized:
+        raise ValueError(f"{plate!r} contains no letters or digits; refusing to act on it")
+    return normalized
+
+
+def _plate_pattern(normalized: str) -> re.Pattern[str]:
+    """
+    The plate as a whole token, however it was typed ("ab12 cd", "AB-12-CD").
+
+    Bounded by non-alphanumerics on both sides, so erasing "AB12" never bites
+    into another subject's "AB12CD".
+    """
+    body = r"[\s-]*".join(re.escape(ch) for ch in normalized)
+    return re.compile(rf"(?<![A-Za-z0-9]){body}(?![A-Za-z0-9])", re.IGNORECASE)
+
+
+def _mentions(value: Any, pattern: re.Pattern[str]) -> bool:
+    if isinstance(value, str):
+        return pattern.search(value) is not None
+    if isinstance(value, dict):
+        return any(_mentions(v, pattern) for v in value.values())
+    if isinstance(value, list):
+        return any(_mentions(v, pattern) for v in value)
+    return False
 
 
 def _audit_matching(plate: str, alert_ids: list[str]):
@@ -62,7 +106,8 @@ def export_by_plate(db: Session, plate: str) -> dict[str, Any]:
     Audit entries are included: a data subject is entitled to know who looked
     at their data, not merely that it was recorded.
     """
-    normalized = normalize_plate(plate)
+    normalized = _subject(plate)
+    pattern = _plate_pattern(normalized)
 
     vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == normalized))
     alerts = list(db.scalars(select(Alert).where(Alert.plate_number == normalized)).all())
@@ -71,7 +116,13 @@ def export_by_plate(db: Session, plate: str) -> dict[str, Any]:
     )
 
     alert_ids = [str(a.id) for a in alerts]
-    audit_rows = list(db.scalars(_audit_matching(normalized, alert_ids)))
+    # SQL narrows by substring; the token match then drops rows that only
+    # contain the plate inside a longer one (another subject's data).
+    audit_rows = [
+        entry
+        for entry in db.scalars(_audit_matching(normalized, alert_ids))
+        if entry.resource_id in alert_ids or _mentions(entry.details, pattern)
+    ]
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -103,11 +154,18 @@ def erase_by_plate(
     compliance failure for another. The identifying value is replaced; the
     event survives.
     """
-    normalized = normalize_plate(plate)
+    normalized = _subject(plate)
+    pattern = _plate_pattern(normalized)
     tombstone = _tombstone()
     now = datetime.now(timezone.utc)
 
-    counts = {"vehicles": 0, "alerts": 0, "access_logs": 0, "audit_entries": 0}
+    counts = {
+        "vehicles": 0,
+        "alerts": 0,
+        "access_logs": 0,
+        "audit_entries": 0,
+        "comments": 0,
+    }
 
     vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == normalized))
     if vehicle is not None:
@@ -117,11 +175,25 @@ def erase_by_plate(
         vehicle.is_active = False
         counts["vehicles"] = 1
 
+    alert_ids = []
     for alert in db.scalars(select(Alert).where(Alert.plate_number == normalized)).all():
         alert.plate_number = tombstone
         if alert.confirmed_plate:
             alert.confirmed_plate = tombstone
+        # The image is the plate. Keeping it would make the erasure cosmetic.
+        alert.plate_crop = None
+        alert_ids.append(alert.id)
         counts["alerts"] += 1
+
+    # Operators write the plate into comments on its alerts.
+    if alert_ids:
+        for comment in db.scalars(
+            select(AlertComment).where(AlertComment.alert_id.in_(alert_ids))
+        ).all():
+            scrubbed = pattern.sub(tombstone, comment.body)
+            if scrubbed != comment.body:
+                comment.body = scrubbed
+                counts["comments"] += 1
 
     for entry in db.scalars(
         select(AccessLog).where(AccessLog.plate_number == normalized)
@@ -135,8 +207,8 @@ def erase_by_plate(
     # Streamed rather than materialised: this table is audited on every read and
     # is the fastest-growing one in the schema.
     for entry in db.scalars(_audit_matching(normalized, []).execution_options(yield_per=500)):
-        if isinstance(entry.details, dict) and normalized in str(entry.details):
-            entry.details = _scrub(entry.details, normalized, tombstone)
+        if isinstance(entry.details, dict) and _mentions(entry.details, pattern):
+            entry.details = _scrub(entry.details, pattern, tombstone)
             counts["audit_entries"] += 1
 
     record = {
@@ -164,22 +236,15 @@ def erase_by_plate(
     return record
 
 
-def _scrub(payload: dict, needle: str, replacement: str) -> dict:
-    """Replace a plate wherever it appears in a nested audit payload."""
-    scrubbed: dict[str, Any] = {}
-    for key, value in payload.items():
-        if isinstance(value, str):
-            scrubbed[key] = value.replace(needle, replacement)
-        elif isinstance(value, dict):
-            scrubbed[key] = _scrub(value, needle, replacement)
-        elif isinstance(value, list):
-            scrubbed[key] = [
-                item.replace(needle, replacement) if isinstance(item, str) else item
-                for item in value
-            ]
-        else:
-            scrubbed[key] = value
-    return scrubbed
+def _scrub(value: Any, pattern: re.Pattern[str], replacement: str) -> Any:
+    """Replace the plate wherever it appears as a token in a nested payload."""
+    if isinstance(value, str):
+        return pattern.sub(replacement, value)
+    if isinstance(value, dict):
+        return {key: _scrub(item, pattern, replacement) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_scrub(item, pattern, replacement) for item in value]
+    return value
 
 
 def _serialize_vehicle(vehicle: Vehicle) -> dict[str, Any]:

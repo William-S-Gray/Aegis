@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Uuid
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -29,6 +29,7 @@ class AccessLog(Base):
     __table_args__ = (
         Index("ix_access_logs_plate_timestamp", "plate_number", "timestamp"),
         Index("ix_access_logs_site_timestamp", "site_id", "timestamp"),
+        UniqueConstraint("client_ref", name="uq_access_logs_client_ref"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -49,9 +50,13 @@ class AccessLog(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
+    # Server time. Retention keys on this, never on the client's timestamp.
     recorded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
+
+    # Client-generated per decision; makes an offline replay idempotent.
+    client_ref: Mapped[uuid.UUID | None] = mapped_column(Uuid)
 
     # The guard who made the call.
     user_id: Mapped[uuid.UUID | None] = mapped_column(

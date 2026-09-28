@@ -23,13 +23,14 @@ def record(
 
     Never pass passwords, tokens, or other credentials in `details`.
     """
+    ip = client_ip(request) if request else None
     entry = AuditLog(
         actor_id=actor_id,
         actor_email=actor_email,
         action=action,
         resource_type=resource_type,
         resource_id=resource_id,
-        ip_address=client_ip(request) if request else None,
+        ip_address=ip[:45] if ip else None,
         user_agent=(request.headers.get("user-agent")[:500] if request and request.headers.get("user-agent") else None),
         details=details,
     )

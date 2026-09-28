@@ -10,6 +10,9 @@ from app.models import Role
 
 logger = logging.getLogger(__name__)
 
+# Longest one socket may take to accept an alert before it is dropped.
+_SEND_TIMEOUT_SECONDS = 5
+
 
 class ConnectionManager:
     """
@@ -19,9 +22,10 @@ class ConnectionManager:
     desk terminal receives an alert on both, and by role so a broadcast can
     target exactly the people who should see it.
 
-    State is per-process. Behind more than one API replica a guard connected to
-    instance A will not receive an alert raised on instance B — put Redis
-    pub/sub behind `broadcast` before scaling out.
+    State is per-process, so the API must run as ONE replica. Behind more than
+    one, a guard connected to instance A never receives an alert raised on
+    instance B. Redis makes throttling and tickets replica-safe; it does not
+    make this. Put Redis pub/sub behind `broadcast` before scaling out.
     """
 
     def __init__(self) -> None:
@@ -54,28 +58,36 @@ class ConnectionManager:
                 return list(self._roles.keys())
             return [ws for ws, role in self._roles.items() if role in roles]
 
+    async def _send(self, websocket: WebSocket, payload: dict[str, Any]) -> bool:
+        try:
+            await asyncio.wait_for(websocket.send_json(payload), timeout=_SEND_TIMEOUT_SECONDS)
+            return True
+        except Exception:
+            logger.debug("Dropping unwritable websocket", exc_info=True)
+            async with self._lock:
+                self._roles.pop(websocket, None)
+                for sockets in self._by_user.values():
+                    sockets.discard(websocket)
+            # Close it too: a socket dropped from the registry but left open
+            # would look connected to its guard while receiving nothing. The
+            # client reconnects and gets a fresh registration.
+            try:
+                await asyncio.wait_for(websocket.close(), timeout=_SEND_TIMEOUT_SECONDS)
+            except Exception:
+                pass
+            return False
+
     async def broadcast(self, payload: dict[str, Any], roles: set[Role] | None = None) -> int:
         """
-        Send `payload` to every matching connection.
+        Send `payload` to every matching connection, concurrently.
 
-        Returns the number of sockets written to. A failed send drops that
-        connection rather than aborting the fan-out, so one dead client cannot
-        stop the others being notified.
+        Returns the number of sockets written to. Each send is time-bounded, so
+        one guard on a stalled network delays nobody else, and a failed send
+        drops that connection rather than aborting the fan-out.
         """
-        delivered = 0
-        for websocket in await self._targets(roles):
-            try:
-                await websocket.send_json(payload)
-                delivered += 1
-            except Exception:
-                logger.debug("Dropping unwritable websocket", exc_info=True)
-                async with self._lock:
-                    role_gone = self._roles.pop(websocket, None)
-                if role_gone is not None:
-                    async with self._lock:
-                        for sockets in self._by_user.values():
-                            sockets.discard(websocket)
-        return delivered
+        targets = await self._targets(roles)
+        results = await asyncio.gather(*(self._send(ws, payload) for ws in targets))
+        return sum(results)
 
     def broadcast_threadsafe(
         self, payload: dict[str, Any], roles: set[Role] | None = None

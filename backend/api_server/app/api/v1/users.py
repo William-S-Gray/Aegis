@@ -20,7 +20,12 @@ def list_users(
     # Guards need the roster to assign alerts, so this is not admin-only.
     current_user: User = Depends(require_guard),
 ) -> list[User]:
-    return list(db.scalars(select(User).order_by(User.full_name)).all())
+    query = select(User).order_by(User.full_name)
+    if current_user.role != Role.ADMIN:
+        # Guards need colleagues to assign alerts to, not the service account,
+        # plain users, or former staff.
+        query = query.where(User.is_active.is_(True), User.role.in_([Role.ADMIN, Role.GUARD]))
+    return list(db.scalars(query).all())
 
 
 @router.post("", response_model=UserPublic, status_code=status.HTTP_201_CREATED)

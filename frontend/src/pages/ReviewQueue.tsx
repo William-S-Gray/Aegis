@@ -51,6 +51,50 @@ const confidenceScheme = (value?: number | null) => {
   return pct > 80 ? 'green' : pct > 60 ? 'yellow' : 'red';
 };
 
+/**
+ * The plate as the camera captured it. Fetched through the API client because
+ * the endpoint needs the bearer token, which an <img src> cannot send.
+ */
+const PlateCrop: React.FC<{ alertId: string }> = ({ alertId }) => {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let url: string | null = null;
+    api
+      .get(`/alerts/${alertId}/crop`, { responseType: 'blob' })
+      .then(({ data }) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(data as Blob);
+        setSrc(url);
+      })
+      .catch(() => {
+        if (!cancelled) setSrc(null);
+      });
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [alertId]);
+
+  if (!src) {
+    return (
+      <Text fontSize="sm" color="orange.700" mb={3}>
+        No image was captured. Check the vehicle at the gate before confirming.
+      </Text>
+    );
+  }
+  return (
+    <Box mb={3}>
+      <img
+        src={src}
+        alt="Plate as captured by the camera"
+        style={{ maxHeight: 96, borderRadius: 6, border: '1px solid #e2e8f0' }}
+      />
+    </Box>
+  );
+};
+
 const ReviewQueue: React.FC = () => {
   const [alerts, setAlerts] = useState<ReviewAlert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,9 +111,10 @@ const ReviewQueue: React.FC = () => {
       const { data } = await api.get<ReviewAlert[]>('/alerts/review-queue');
       const queue = asArray<ReviewAlert>(data);
       setAlerts(queue);
-      // Pre-fill each box with the machine's reading: most reads are correct,
-      // so confirming should be one click rather than full re-entry.
-      setDrafts(Object.fromEntries(queue.map((a) => [a.id, a.plate_number])));
+      // Deliberately empty. Pre-filling the machine's reading made confirming
+      // one click, so reviewers approved what the detector guessed rather than
+      // what they could see. Typing it is the review.
+      setDrafts({});
     } catch (err) {
       setAlerts([]);
       setError(apiMessage(err, 'Could not load the review queue'));
@@ -107,6 +152,12 @@ const ReviewQueue: React.FC = () => {
       });
       setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
     } catch (err) {
+      if ((err as { response?: { status?: number } })?.response?.status === 409) {
+        // Someone else reviewed it first; it is no longer ours to confirm.
+        toast({ title: 'Already reviewed by someone else', status: 'info' });
+        setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+        return;
+      }
       toast({
         title: 'Could not save',
         description: apiMessage(err, 'The confirmation was not recorded'),
@@ -210,6 +261,8 @@ const ReviewQueue: React.FC = () => {
               </Box>
             </Flex>
 
+            <PlateCrop alertId={alert.id} />
+
             <HStack spacing={8} mb={4} fontSize="sm" wrap="wrap">
               <Box>
                 <Text color="gray.500">Detected</Text>
@@ -246,7 +299,7 @@ const ReviewQueue: React.FC = () => {
               >
                 Confirm
               </Button>
-              {(drafts[alert.id] ?? '') !== alert.plate_number && (
+              {Boolean(drafts[alert.id]) && drafts[alert.id] !== alert.plate_number && (
                 <Text fontSize="xs" color="orange.600">
                   This will be recorded as a correction.
                 </Text>

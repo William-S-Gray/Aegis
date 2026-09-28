@@ -9,7 +9,7 @@ logout, `/me`, server-side RBAC, and an append-only audit log.
 cd backend/api_server
 
 python -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements-dev.txt
 
 cp .env.example .env          # then set SECRET_KEY
 docker compose up -d          # PostgreSQL on 5435, Redis on 6383
@@ -125,8 +125,13 @@ widening it later has to be a conscious edit.
 
 - Set a real `SECRET_KEY`; the app refuses to boot without one when
   `ENVIRONMENT=production`.
-- Terminate TLS in front of the API and run it behind a proxy that overwrites
-  `X-Forwarded-For`.
+- Terminate TLS in front of the API and set `FORWARDED_ALLOW_IPS` to the
+  proxy's address. The app never reads `X-Forwarded-For` itself; uvicorn
+  honours it only from those addresses.
+- Set `METRICS_TOKEN` (32+ random characters); the server refuses to start
+  without it outside development.
+- Run a single API replica (the alert stream is in-process).
 - Set `REDIS_URL`. The app refuses to start without it outside development,
   because a per-process rate limiter behind a load balancer protects nothing.
-- Add a retention/purge job for `audit_logs` matching your data policy.
+- Schedule `python -m app.cli purge` (retention, including plate images after
+  `RETENTION_CROP_DAYS`, default 30).

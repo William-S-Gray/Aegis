@@ -18,13 +18,26 @@ import os
 import sys
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core.security import hash_password
 from app.database import SessionLocal
 from app.models import Role, User
 from app.schemas.user import MIN_PASSWORD_LENGTH
 from app.services import privacy, retention
+
+
+def _session():
+    """
+    A session without the API's per-query time limit.
+
+    Erasure scans the audit log and purge works through a backlog; both can
+    legitimately run longer than any single API request should.
+    """
+    db = SessionLocal()
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(text("SET statement_timeout = 0"))
+    return db
 
 
 def create_user(email: str, full_name: str, role: str) -> int:
@@ -43,7 +56,7 @@ def create_user(email: str, full_name: str, role: str) -> int:
         )
         return 1
 
-    with SessionLocal() as db:
+    with _session() as db:
         if db.scalar(select(User).where(User.email == email)):
             print(f"A user with email {email} already exists.", file=sys.stderr)
             return 1
@@ -62,7 +75,7 @@ def create_user(email: str, full_name: str, role: str) -> int:
 
 
 def purge(dry_run: bool) -> int:
-    with SessionLocal() as db:
+    with _session() as db:
         if dry_run:
             plan = retention.plan(db)
             print("Retention plan (nothing deleted):")
@@ -78,8 +91,12 @@ def purge(dry_run: bool) -> int:
 
 
 def export_subject(plate: str, out: str | None) -> int:
-    with SessionLocal() as db:
-        payload = privacy.export_by_plate(db, plate)
+    with _session() as db:
+        try:
+            payload = privacy.export_by_plate(db, plate)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
 
     text = json.dumps(payload, indent=2)
     if out:
@@ -98,6 +115,10 @@ def erase_subject(plate: str, confirm: str, reason: str | None) -> int:
     """
     from app.models import normalize_plate
 
+    if not normalize_plate(plate):
+        print(f"Refusing to erase: {plate!r} contains no letters or digits.", file=sys.stderr)
+        return 1
+
     if normalize_plate(confirm) != normalize_plate(plate):
         print(
             "Refusing to erase: --confirm must repeat the plate exactly.",
@@ -105,7 +126,7 @@ def erase_subject(plate: str, confirm: str, reason: str | None) -> int:
         )
         return 1
 
-    with SessionLocal() as db:
+    with _session() as db:
         preview = privacy.export_by_plate(db, plate)
         if not any(preview["counts"].values()) and preview["vehicle"] is None:
             print(f"No data found for {preview['plate_number']}; nothing to erase.")

@@ -43,10 +43,15 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-aegis}
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_JSON: ${LOG_JSON:-true}
-      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # /metrics is on the published API port, so it is never left open.
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN is required (see .env.example)}
+      # Addresses of the reverse proxy in front of the API. Only these may set
+      # X-Forwarded-For; everyone else is identified by their TCP address.
+      # Never "*": that lets any client choose the IP the login throttle sees.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
     ports:
       - "${API_PORT:-8081}:8000"
     depends_on:
@@ -63,6 +68,8 @@ services:
       context: ./backend/api_server
     command: ["alembic", "upgrade", "head"]
     environment:
+      # Index builds and backfills are not bound by the API's query limit.
+      DB_STATEMENT_TIMEOUT_MS: "0"
       ENVIRONMENT: ${ENVIRONMENT:-production}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-aegis}
       REDIS_URL: redis://redis:6379/0
@@ -81,6 +88,8 @@ services:
       context: ./backend/api_server
     command: ["python", "-m", "app.cli", "purge"]
     environment:
+      # Batched deletes on a large backlog can exceed the API's query limit.
+      DB_STATEMENT_TIMEOUT_MS: "0"
       ENVIRONMENT: ${ENVIRONMENT:-production}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-aegis}
       REDIS_URL: redis://redis:6379/0
@@ -116,7 +125,7 @@ services:
         # Flip to "true" once you have plate weights; adds ~3 GB.
         INCLUDE_ML: ${INCLUDE_ML:-false}
     environment:
-      VISION_ENVIRONMENT: ${ENVIRONMENT:-development}
+      VISION_ENVIRONMENT: ${ENVIRONMENT:-production}
       VISION_API_URL: http://api:8000/api/v1
       VISION_SERVICE_EMAIL: ${VISION_SERVICE_EMAIL:-vision@aegis.example}
       VISION_SERVICE_PASSWORD: ${VISION_SERVICE_PASSWORD:?VISION_SERVICE_PASSWORD is required}

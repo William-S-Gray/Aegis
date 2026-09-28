@@ -14,8 +14,9 @@ class VisionSettings(BaseSettings):
 
     # ---- API integration ------------------------------------------------
     api_url: str = "http://localhost:8000/api/v1"
-    # Dedicated service account. Give it the guard role and nothing more, so a
-    # leaked camera credential cannot administer the system.
+    # Dedicated account with the `service` role, which may publish detections
+    # and nothing else: a leaked camera credential cannot read the register,
+    # confirm plates, or record access decisions.
     service_email: str = ""
     service_password: str = ""
     site_id: str | None = None

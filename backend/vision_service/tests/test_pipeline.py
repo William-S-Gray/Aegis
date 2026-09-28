@@ -175,6 +175,8 @@ class TestGating:
             "site_id": "site-1",
             "detector_name": "fixed",
             "detector_version": "1.0",
+            # Test frames are bytes, not image arrays, so there is no crop.
+            "plate_crop_jpeg": None,
         }
 
 
@@ -265,3 +267,28 @@ class TestStats:
         assert stats["detections"] == 1
         assert stats["published"] == 1
         assert stats["deduped"] == 0
+
+
+class TestCropEncoding:
+    @pytest.mark.parametrize("crop", [None, b"raw-bytes", []])
+    def test_non_images_are_published_without_a_crop(self, crop):
+        from app.pipeline import encode_crop
+
+        assert encode_crop(crop) is None
+
+
+class TestSourceKind:
+    @pytest.mark.parametrize(
+        ("uri", "live"),
+        [
+            ("rtsp://cam/stream", True),
+            ("http://cam/video", True),
+            ("/data/replay.mp4", False),
+            ("clip.mkv", False),
+        ],
+    )
+    def test_only_network_streams_are_reopened(self, uri, live):
+        """A file used to be reopened after EOF, replaying every plate in it."""
+        from app.sources import is_live
+
+        assert is_live(uri) is live

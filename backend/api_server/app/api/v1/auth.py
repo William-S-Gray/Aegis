@@ -14,7 +14,7 @@ from app.core.security import (
     needs_rehash,
     verify_password,
 )
-from app.core.state import login_throttle
+from app.core.state import ip_throttle, login_throttle
 from app.database import get_db
 from app.models import RefreshToken, User
 from app.schemas import LoginRequest, RefreshRequest, TokenResponse, UserPublic
@@ -50,19 +50,28 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
-    throttle_key = f"{payload.email}|{client_ip(request) or 'unknown'}"
+    ip = client_ip(request) or "unknown"
+    account_key = f"{payload.email}|{ip}"
 
-    retry_after = login_throttle.retry_after(throttle_key)
+    # Two limits, both counted on every attempt before the password is checked:
+    # per account+address stops guessing one password, per address stops one
+    # source spraying many accounts.
+    retry_after = max(
+        login_throttle.attempt(account_key),
+        ip_throttle.attempt(f"ip:{ip}"),
+    )
     if retry_after:
-        response.headers["Retry-After"] = str(retry_after)
-        audit.record(
-            db,
-            action="auth.login.throttled",
-            request=request,
-            actor_email=payload.email,
-        )
+        # Audited once per address per window. Auditing every rejected request
+        # would let an unauthenticated caller grow the audit table at will.
+        if login_throttle.first_rejection(ip):
+            audit.record(
+                db,
+                action="auth.login.throttled",
+                request=request,
+                actor_email=payload.email,
+            )
+            db.commit()
         metrics.login_attempts.labels(outcome="throttled").inc()
-        db.commit()
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many failed attempts. Try again later.",
@@ -80,7 +89,6 @@ def login(
     )
 
     if user is None or not password_ok or not user.is_active:
-        login_throttle.record_failure(throttle_key)
         audit.record(
             db,
             action="auth.login.failed",
@@ -99,7 +107,9 @@ def login(
     if needs_rehash(user.hashed_password):
         user.hashed_password = hash_password(payload.password)
 
-    login_throttle.reset(throttle_key)
+    # The address counter is deliberately not reset: one success must not
+    # clear a spraying source's tally.
+    login_throttle.reset(account_key)
     user.last_login_at = datetime.now(timezone.utc)
 
     tokens = _issue_tokens(db, user)

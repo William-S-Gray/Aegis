@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 import re
 import time
@@ -16,10 +17,34 @@ _NON_ALNUM = re.compile(r"[^A-Z0-9]")
 # of a bumper sticker or a reflection.
 MIN_PLATE_LENGTH = 4
 
+# Largest encoded crop sent to the API (it accepts up to ~64 KB decoded).
+MAX_CROP_BYTES = 60_000
+
 
 def normalize_plate(text: str) -> str:
     """Match the API's canonical form so both sides agree on identity."""
     return _NON_ALNUM.sub("", text.upper())
+
+
+def encode_crop(crop) -> str | None:
+    """
+    The plate crop as base64 JPEG, for the reviewer who confirms the read.
+
+    Best effort: without OpenCV, or for an empty or oversized crop, the alert is
+    published without an image rather than not at all.
+    """
+    if crop is None or not getattr(crop, "size", 0):
+        return None
+    try:
+        import cv2  # noqa: PLC0415 - optional dependency
+
+        ok, buffer = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    except Exception:
+        logger.debug("Could not encode a plate crop", exc_info=True)
+        return None
+    if not ok or len(buffer) > MAX_CROP_BYTES:
+        return None
+    return base64.b64encode(buffer.tobytes()).decode("ascii")
 
 
 @dataclass
@@ -145,6 +170,7 @@ class Pipeline:
                     frame=frame,
                     detector_name=self._detector.name,
                     detector_version=self._detector.version,
+                    crop=crop,
                 )
             )
 
@@ -165,6 +191,7 @@ class Pipeline:
             "site_id": observation.frame.site_id or self._site_id,
             "detector_name": observation.detector_name,
             "detector_version": observation.detector_version,
+            "plate_crop_jpeg": encode_crop(observation.crop),
         }
 
     # ----------------------------------------------------------- publish
@@ -198,11 +225,15 @@ class Pipeline:
             published.append(alert)
 
             if alert.get("requires_review"):
+                # Identified by alert id, never by plate: stdout is outside
+                # every retention and erasure mechanism.
                 logger.info(
-                    "Plate %s queued for human review (%s, confidence %.2f)",
-                    observation.plate_text,
-                    alert.get("review_reason"),
-                    observation.plate_confidence,
+                    "Detection queued for human review",
+                    extra={
+                        "alert_id": alert.get("id"),
+                        "review_reason": alert.get("review_reason"),
+                        "confidence": observation.plate_confidence,
+                    },
                 )
 
         return published

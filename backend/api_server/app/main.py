@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -6,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Header, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from sqlalchemy import text
 
 from app.api.v1.router import api_router
 from app.config import get_settings
@@ -13,11 +15,20 @@ from app.core import metrics
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.core.ws_manager import manager
+from app.database import engine
 
 settings = get_settings()
 configure_logging(level=settings.log_level, json_output=settings.log_json)
 
 logger = logging.getLogger("aegis.startup")
+
+# Checked here rather than in get_settings(): the migrate and purge containers
+# share the settings but never serve /metrics, and must not need the token.
+if settings.environment != "development" and settings.metrics_enabled and not settings.metrics_token:
+    raise RuntimeError(
+        "METRICS_TOKEN must be set outside development (or set METRICS_ENABLED=false): "
+        "/metrics is served on the same port as the public API."
+    )
 
 
 @asynccontextmanager
@@ -64,11 +75,31 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/ready", tags=["meta"])
+def ready() -> dict[str, str]:
+    """
+    Readiness: can this instance serve requests that need the database?
+
+    Redis is deliberately not checked. Only login and WebSocket tickets need it,
+    and failing readiness on a Redis outage would take every other endpoint
+    down with it.
+    """
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        logger.warning("Readiness check failed: database unreachable", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable"
+        ) from None
+    return {"status": "ready"}
+
+
 def _authorize_metrics(authorization: str | None = Header(default=None)) -> None:
     if not settings.metrics_token:
         return
-    expected = f"Bearer {settings.metrics_token}"
-    if authorization != expected:
+    expected = f"Bearer {settings.metrics_token}".encode()
+    if not hmac.compare_digest((authorization or "").encode(), expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authorised")
 
 

@@ -76,7 +76,8 @@ def run(settings: VisionSettings, once: bool = False) -> int:
     if not settings.service_email or not settings.service_password:
         logger.error(
             "VISION_SERVICE_EMAIL and VISION_SERVICE_PASSWORD must be set. "
-            "Create a dedicated guard-role account for this service."
+            "Create a dedicated service-role account for this service: "
+            "python -m app.cli create-user --role service (never --role guard)."
         )
         return 1
 
