@@ -78,6 +78,9 @@ require_any_user = require_roles(Role.ADMIN, Role.GUARD, Role.USER)
 # so widening it later has to be a conscious edit.
 require_alert_publisher = require_roles(Role.ADMIN, Role.GUARD, Role.SERVICE)
 
+# Camera preview frames come only from the vision service.
+require_frame_publisher = require_roles(Role.SERVICE)
+
 
 def client_ip(request: Request) -> str | None:
     """

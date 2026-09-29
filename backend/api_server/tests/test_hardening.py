@@ -414,3 +414,58 @@ class TestCliCreateUser:
         # made GET /users return 500 for every admin once one such row existed.
         assert create_user("admin@aegis.local", "Admin", "admin") == 1
         assert "Invalid email" in capsys.readouterr().err
+
+
+class TestCameraPreview:
+    JPEG = b"\xff\xd8\xff\xe0" + b"frame" * 20
+
+    def _publish(self, client, headers, body=JPEG, camera="main-gate"):
+        return client.put(
+            f"/api/v1/cameras/{camera}/frame?name=Main%20Gate",
+            content=body,
+            headers={**headers, "content-type": "image/jpeg"},
+        )
+
+    def test_guard_sees_the_latest_frame_the_service_published(self, client, auth, db):
+        service, _ = auth(Role.SERVICE)
+        guard, _ = auth(Role.GUARD)
+        assert self._publish(client, service).status_code == 204
+
+        cameras = client.get("/api/v1/cameras", headers=guard).json()
+        assert [(c["id"], c["name"], c["online"]) for c in cameras] == [("main-gate", "Main Gate", True)]
+
+        frame = client.get("/api/v1/cameras/main-gate/frame", headers=guard)
+        assert frame.status_code == 200
+        assert frame.content == self.JPEG
+        assert frame.headers["cache-control"] == "no-store"
+
+        # Viewing is audited once per window, not once per polled frame.
+        client.get("/api/v1/cameras/main-gate/frame", headers=guard)
+        views = db.scalars(select(AuditLog).where(AuditLog.action == "camera.viewed")).all()
+        assert len(views) == 1
+
+    def test_only_the_service_account_may_publish(self, client, auth):
+        for role in (Role.GUARD, Role.ADMIN):
+            headers, _ = auth(role)
+            assert self._publish(client, headers).status_code == 403
+
+    def test_the_service_account_cannot_watch(self, client, auth):
+        service, _ = auth(Role.SERVICE)
+        assert client.get("/api/v1/cameras", headers=service).status_code == 403
+
+    def test_rejects_non_jpeg_oversized_and_malformed_ids(self, client, auth):
+        service, _ = auth(Role.SERVICE)
+        assert self._publish(client, service, body=b"\x89PNG....").status_code == 415
+        big = b"\xff\xd8" + b"x" * (600 * 1024)
+        assert self._publish(client, service, body=big).status_code == 413
+        assert self._publish(client, service, camera="Bad_ID").status_code == 404
+
+    def test_a_silent_camera_is_offline(self, client, auth, monkeypatch):
+        from app.api.v1 import cameras
+
+        service, _ = auth(Role.SERVICE)
+        guard, _ = auth(Role.GUARD)
+        self._publish(client, service)
+        monkeypatch.setattr(cameras, "STALE_AFTER_SECONDS", 0)
+        assert client.get("/api/v1/cameras", headers=guard).json()[0]["online"] is False
+        assert client.get("/api/v1/cameras/main-gate/frame", headers=guard).status_code == 404

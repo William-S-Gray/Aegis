@@ -6,14 +6,15 @@ import {
   FormControl, FormLabel, Input, Select, Textarea
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
-import { cameraStreamUrl, guardAlertsSocketUrl } from '../config';
+import { guardAlertsSocketUrl } from '../config';
+import CameraPanel from '../components/CameraPanel';
 import db, { newClientRef } from '../db';
 import api from '../api';
 import { apiMessage } from '../utils/safe';
 import { startOfflineSync } from '../services/OfflineSyncService';
 import {
   FiActivity, FiAlertTriangle, FiCheckCircle, FiXCircle,
-  FiCamera, FiEye, FiUnlock, FiWifi
+  FiCamera, FiUnlock
 } from 'react-icons/fi';
 
 // Endpoints come from src/config.ts so deployments are environment-driven
@@ -80,30 +81,6 @@ const GuardDashboard: React.FC = () => {
     authorization: ''
   });
 
-  // Live Feed State
-  const [liveFeeds, setLiveFeeds] = useState([
-    {
-      id: 1,
-      name: 'Phone Camera (Main Gate)',
-      url: cameraStreamUrl('video_feed'),
-      status: 'active',
-    },
-    {
-      id: 2,
-      name: 'Side Entrance Camera',
-      url: cameraStreamUrl('stream/side-entrance'),
-      status: 'inactive',
-    },
-    {
-      id: 3,
-      name: 'Back Gate Camera',
-      url: cameraStreamUrl('stream/back-gate'),
-      status: 'inactive',
-    }
-  ]);
-
-  const [selectedFeed, setSelectedFeed] = useState(1);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Responsive design
   const bgColor = useColorModeValue('white', 'gray.800');
@@ -326,30 +303,6 @@ const GuardDashboard: React.FC = () => {
     }
   };
 
-  // Live Feed Handlers
-  const handleFeedToggle = (feedId: number) => {
-    setLiveFeeds(prev => prev.map(feed => 
-      feed.id === feedId 
-        ? { ...feed, status: feed.status === 'active' ? 'inactive' : 'active' }
-        : feed
-    ));
-    
-    const feed = liveFeeds.find(f => f.id === feedId);
-    toast({
-      title: `Camera ${feed?.status === 'active' ? 'Deactivated' : 'Activated'}`,
-      description: `${feed?.name} has been ${feed?.status === 'active' ? 'deactivated' : 'activated'}`,
-      status: feed?.status === 'active' ? 'warning' : 'success'
-    });
-  };
-
-  const handleFeedSelect = (feedId: number) => {
-    setSelectedFeed(feedId);
-  };
-
-  const handleFullscreenToggle = () => {
-    setIsFullscreen(!isFullscreen);
-  };
-
   return (
     <Box p={{ base: 4, md: 8 }} bg="gray.50" minH="100vh">
       {/* Header */}
@@ -373,177 +326,7 @@ const GuardDashboard: React.FC = () => {
       </Flex>
 
 
-      {/* Live Feed Section */}
-      <Card bg={bgColor} border="1px" borderColor={borderColor} mb={8}>
-        <CardHeader>
-          <Flex justify="space-between" align="center">
-            <Heading size="md">Live Camera Feeds</Heading>
-            <HStack spacing={2}>
-              <Button
-                variant="neumorphic"
-                size="sm"
-                leftIcon={<FiEye />}
-                onClick={handleFullscreenToggle}
-                _hover={{
-                  bg: 'blue.50',
-                  color: 'blue.600',
-                  boxShadow: '4px 4px 8px #bfdbfe, -4px -4px 8px #ffffff',
-                }}
-              >
-                {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-              </Button>
-            </HStack>
-          </Flex>
-        </CardHeader>
-        <CardBody>
-          <Grid templateColumns={{ base: '1fr', lg: '3fr 1fr' }} gap={6}>
-            {/* Main Video Feed */}
-            <Box>
-              <Box
-                position="relative"
-                bg="gray.900"
-                borderRadius="xl"
-                overflow="hidden"
-                boxShadow="inset 4px 4px 8px #1a202c, inset -4px -4px 8px #2d3748"
-                border="1px solid"
-                borderColor="gray.700"
-                minH="400px"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-              >
-                {/* Real Video Stream Component */}
-                {liveFeeds.find(f => f.id === selectedFeed)?.status === 'active' && (
-                  <Box
-                    position="absolute"
-                    top={0}
-                    left={0}
-                    right={0}
-                    bottom={0}
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    {/* Real video stream from phone camera */}
-                    <Box
-                      position="relative"
-                      w="full"
-                      h="full"
-                      borderRadius="md"
-                      overflow="hidden"
-                    >
-                      <img
-                        src={cameraStreamUrl('video_feed')}
-                        alt="Live Camera Feed"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).style.display = 'none';
-                          const fallback = document.getElementById('camera-fallback');
-                          if (fallback) fallback.style.display = 'flex';
-                        }}
-                      />
-                      <VStack
-                        id="camera-fallback"
-                        spacing={4}
-                        color="gray.400"
-                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'white', display: 'none', alignItems: 'center', justifyContent: 'center' }}
-                      >
-                        <Icon as={FiCamera} w={16} h={16} />
-                        <Text fontSize="lg" fontWeight="bold">Phone Camera Feed</Text>
-                        <Text fontSize="sm" textAlign="center">
-                          Loading camera stream...<br />
-                          Make sure IP Camera Lite is running
-                        </Text>
-                        <HStack spacing={4} mt={4}>
-                          <Badge colorScheme="blue" variant="subtle">
-                            <HStack spacing={1}>
-                              <Icon as={FiWifi} w={3} h={3} />
-                              <Text>CONNECTING</Text>
-                            </HStack>
-                          </Badge>
-                        </HStack>
-                      </VStack>
-                    </Box>
-                  </Box>
-                )}
-
-                {/* Fallback when camera is inactive */}
-                {liveFeeds.find(f => f.id === selectedFeed)?.status === 'inactive' && (
-                  <VStack spacing={4} color="gray.400">
-                    <Icon as={FiCamera} w={16} h={16} />
-                    <Text fontSize="lg" fontWeight="bold">
-                      {liveFeeds.find(f => f.id === selectedFeed)?.name}
-                    </Text>
-                    <Text fontSize="sm" textAlign="center">
-                      Display paused. Detection is not affected.
-                    </Text>
-                    <Badge colorScheme="red" variant="subtle">
-                      <HStack spacing={1}>
-                        <Box w={2} h={2} bg="red.500" borderRadius="full" />
-                        <Text>OFFLINE</Text>
-                      </HStack>
-                    </Badge>
-                  </VStack>
-                )}
-              </Box>
-            </Box>
-
-            {/* Camera Controls */}
-            <VStack spacing={4} align="stretch">
-              <Text fontWeight="bold" color="gray.700">Camera Feeds</Text>
-              {liveFeeds.map((feed) => (
-                <Box
-                  key={feed.id}
-                  p={4}
-                  border="1px"
-                  borderColor={borderColor}
-                  borderRadius="lg"
-                  bg={selectedFeed === feed.id ? 'blue.50' : bgColor}
-                  cursor="pointer"
-                  onClick={() => handleFeedSelect(feed.id)}
-                  _hover={{
-                    bg: selectedFeed === feed.id ? 'blue.100' : 'gray.50',
-                    boxShadow: '2px 2px 4px #d1d5db, -2px -2px 4px #ffffff',
-                  }}
-                >
-                  <Flex justify="space-between" align="center" mb={2}>
-                    <Text fontWeight="semibold" fontSize="sm">{feed.name}</Text>
-                    <Badge 
-                      colorScheme={feed.status === 'active' ? 'green' : 'red'} 
-                      variant="subtle"
-                      size="sm"
-                    >
-                      {feed.status}
-                    </Badge>
-                  </Flex>
-                  
-                  
-                  <Button
-                    size="xs"
-                    variant="neumorphic"
-                    colorScheme={feed.status === 'active' ? 'red' : 'green'}
-                    mt={2}
-                    w="full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleFeedToggle(feed.id);
-                    }}
-                    _hover={{
-                      bg: feed.status === 'active' ? 'red.50' : 'green.50',
-                      color: feed.status === 'active' ? 'red.600' : 'green.600',
-                      boxShadow: feed.status === 'active' 
-                        ? '4px 4px 8px #fecaca, -4px -4px 8px #ffffff'
-                        : '4px 4px 8px #bbf7d0, -4px -4px 8px #ffffff',
-                    }}
-                  >
-                    {feed.status === 'active' ? 'Deactivate' : 'Activate'}
-                  </Button>
-                </Box>
-              ))}
-            </VStack>
-          </Grid>
-        </CardBody>
-      </Card>
+      <CameraPanel />
 
       {/* Main Content Grid */}
       <Grid templateColumns={{ base: '1fr', lg: '2fr 1fr' }} gap={6}>

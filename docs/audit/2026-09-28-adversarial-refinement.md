@@ -183,7 +183,7 @@ removes this (R-001).
 | R-007 | No refresh-token reuse detection (token families) | Low / Medium | Needs a family column and a revoke-all path | Rotation; 7-day expiry | Next auth iteration |
 | R-008 | Guards see every site's alerts | Medium / Low | No site membership model exists | Audited reads | Single-site deployments are the target today |
 | R-009 | Decisions queued before this release are parked, not synced | Certain once / Low | They carry no owner and cannot be attributed honestly | Visible in IndexedDB with a reason | No admin UI yet; drain the queues before upgrading consoles |
-| R-010 | The guard console's camera feed (`MEDIA_URL/video_feed`) is unauthenticated | Deployment-dependent / Medium | Served by a separate camera host, outside this codebase | CSP limits image origins | Needs a media proxy with authentication |
+| R-010 | The guard console's camera feed (`MEDIA_URL/video_feed`) is unauthenticated | Deployment-dependent / Medium | **Closed 2026-09-30** | The vision service pushes previews to the API; guards fetch them with their session, viewing is audited, and the CSP allows no external image origin | — |
 | R-011 | A service account can upload any JPEG, which guards will see | Low / Low | Content cannot be verified | JPEG magic check; size cap; audited | The service host is already trusted to report plates |
 | R-012 | Backup script exposes the DB password in `ps` (F-015) | Low / Medium | **Closed 2026-09-30** | Password passed via `PGPASSWORD` | — |
 | R-013 | Time-to-resolution analytics are computed in Python (F-037) | Low / Low | **Closed 2026-09-30** | Aggregated in SQL | — |

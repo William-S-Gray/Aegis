@@ -57,11 +57,6 @@ export const WS_BASE_URL = stripTrailingSlash(
     })()
 );
 
-/** Origin serving MJPEG/HLS camera streams. */
-export const MEDIA_BASE_URL = stripTrailingSlash(
-  runtimeValue('MEDIA_URL', import.meta.env.VITE_MEDIA_URL) || 'http://localhost:8000'
-);
-
 /**
  * The ticket is a single-use, ~30s handle obtained from POST /auth/ws-ticket.
  * The access token itself is never placed in the URL, where it would be
@@ -70,9 +65,6 @@ export const MEDIA_BASE_URL = stripTrailingSlash(
 export const guardAlertsSocketUrl = (guardId: string, ticket: string): string =>
   `${WS_BASE_URL}/ws/guard-alerts/${encodeURIComponent(guardId)}` +
   `?ticket=${encodeURIComponent(ticket)}`;
-
-export const cameraStreamUrl = (path: string): string =>
-  `${MEDIA_BASE_URL}/${path.replace(/^\/+/, '')}`;
 
 /**
  * Dev-only mock authentication switch. Must be false in any deployed

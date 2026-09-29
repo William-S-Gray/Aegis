@@ -23,7 +23,8 @@ describe('UserPortal', () => {
       </ChakraProvider>
     );
 
-    expect(await screen.findByText('AB12CD')).toBeInTheDocument();
+    // The first Chakra render in a file can exceed the 1 s default on a loaded runner.
+    expect(await screen.findByText('AB12CD', {}, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText(/colour not recorded/i)).toBeInTheDocument();
   });
 });

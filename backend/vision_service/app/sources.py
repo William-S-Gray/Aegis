@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -58,6 +59,7 @@ class VideoSource:
         frame_interval_seconds: float = 1.0,
         reconnect_delay_seconds: float = 5.0,
         timeout_seconds: float = 10.0,
+        stop: threading.Event | None = None,
     ):
         self._uri = uri
         self._site_id = site_id
@@ -67,6 +69,9 @@ class VideoSource:
         # A live stream that drops is reopened; a file that ends is finished.
         # Reopening a file replays it, re-publishing every plate in it.
         self._live = is_live(uri)
+        # Set on shutdown. Waiting on it rather than sleeping means a camera
+        # that stays down cannot keep the process from stopping.
+        self._stop = stop or threading.Event()
 
     def frames(self) -> Iterator[Frame]:
         try:
@@ -77,7 +82,7 @@ class VideoSource:
                 "`pip install -r requirements-ml.txt` to read video sources."
             ) from exc
 
-        while True:
+        while not self._stop.is_set():
             # Bounded open and read: without these a stalled camera blocks
             # capture.read() forever, and the process never sees SIGTERM.
             capture = cv2.VideoCapture(
@@ -94,7 +99,7 @@ class VideoSource:
                     return
                 # Cameras drop out; wait and retry rather than exiting.
                 logger.warning("Could not open %s; retrying", self._uri)
-                time.sleep(self._reconnect_delay)
+                self._stop.wait(self._reconnect_delay)
                 continue
 
             last_emit = 0.0
@@ -116,7 +121,7 @@ class VideoSource:
 
             if not self._live:
                 return
-            time.sleep(self._reconnect_delay)
+            self._stop.wait(self._reconnect_delay)
 
 
 def is_live(uri: str) -> bool:

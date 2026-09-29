@@ -292,3 +292,34 @@ class TestSourceKind:
         from app.sources import is_live
 
         assert is_live(uri) is live
+
+    def test_shutdown_is_not_blocked_by_a_camera_that_stays_down(self, monkeypatch):
+        """SIGTERM used to be ignored while a dead live camera was being retried."""
+        import threading
+        import time
+        import types
+
+        from app.sources import VideoSource
+
+        class NeverOpens:
+            def __init__(self, *args):
+                pass
+
+            def isOpened(self):
+                return False
+
+        fake_cv2 = types.SimpleNamespace(
+            VideoCapture=NeverOpens,
+            CAP_FFMPEG=0,
+            CAP_PROP_OPEN_TIMEOUT_MSEC=0,
+            CAP_PROP_READ_TIMEOUT_MSEC=0,
+        )
+        monkeypatch.setitem(__import__("sys").modules, "cv2", fake_cv2)
+
+        stop = threading.Event()
+        source = VideoSource("rtsp://cam/down", reconnect_delay_seconds=60, stop=stop)
+        threading.Timer(0.2, stop.set).start()
+
+        started = time.monotonic()
+        assert list(source.frames()) == []
+        assert time.monotonic() - started < 5
