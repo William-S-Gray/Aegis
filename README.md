@@ -38,14 +38,19 @@ The service refuses to start with the stub outside development.
   [README](backend/vision_service/README.md)
 - **`frontend`** — React + TypeScript + Chakra UI.
 
-PostgreSQL holds the data. Redis holds cross-replica state (login throttling,
-WebSocket tickets) and is **required outside development** — without it each
-replica rate-limits only itself.
+PostgreSQL holds the data. Redis holds login throttling and WebSocket tickets
+and is **required outside development**.
+
+**Run the API as a single replica.** The live alert stream fans out in-process:
+behind several replicas, a guard connected to one never receives alerts raised
+on another. Redis makes throttling and tickets replica-safe; it does not make
+the alert stream so.
 
 ## Run the whole stack
 
 ```bash
-cp .env.example .env          # set SECRET_KEY, POSTGRES_PASSWORD, VISION_SERVICE_PASSWORD
+cp .env.example .env          # set SECRET_KEY (32+ chars), POSTGRES_PASSWORD,
+                              # VISION_SERVICE_PASSWORD, METRICS_TOKEN
 docker compose up -d --build
 docker compose --profile tools run --rm migrate
 
@@ -66,7 +71,7 @@ time, so one image promotes unchanged from staging to production.
 cd backend/api_server && docker compose up -d     # PostgreSQL 5435, Redis 6383
 
 # API
-python -m venv .venv && .venv/bin/pip install -r requirements.txt
+python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 cp .env.example .env && .venv/bin/alembic upgrade head
 .venv/bin/uvicorn app.main:app --reload --port 8000
 
@@ -98,7 +103,14 @@ container build on every push — see `.github/workflows/ci.yml`.
   from the path.
 - Audit log covers logins, refreshes, resource changes, and **reads of plate
   data** — the GDPR-relevant part.
-- Containers run as unprivileged users.
+- Containers run as unprivileged users, the nginx frontend included (CI checks
+  every image).
+- Login is throttled per account+address and per address, counted atomically
+  before the password is checked. The address is the TCP peer unless it is a
+  proxy listed in `FORWARDED_ALLOW_IPS`; set that to your reverse proxy, never
+  `*`.
+- Every page carries a Content-Security-Policy generated from the configured
+  API origin, plus frame and sniffing protection.
 
 ## Monitoring
 

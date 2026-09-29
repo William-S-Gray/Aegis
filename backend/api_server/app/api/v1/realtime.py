@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 import uuid
 
 from fastapi import (
@@ -28,6 +29,11 @@ router = APIRouter(tags=["realtime"])
 # How long to wait for client traffic before sending a keepalive. Idle
 # WebSockets are commonly culled by proxies at 60s.
 _HEARTBEAT_SECONDS = 25
+
+# How often a live stream re-checks that its user may still receive alerts.
+_REVALIDATE_SECONDS = 25
+
+_STREAM_ROLES = {Role.ADMIN, Role.GUARD}
 
 
 class TicketResponse(BaseModel):
@@ -92,14 +98,15 @@ async def guard_alerts(
     guard's alerts simply by editing the URL; the path segment is kept only for
     URL readability and is checked against the real identity.
     """
-    user_id = ticket_store.redeem(ticket)
+    # The store may be Redis: never block the event loop on it.
+    user_id = await asyncio.to_thread(ticket_store.redeem, ticket)
     if user_id is None:
         # Reject before completing the handshake.
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid ticket")
         return
 
     user = await asyncio.to_thread(_load_user, session_factory, user_id)
-    if user is None or user.role not in {Role.ADMIN, Role.GUARD}:
+    if user is None or user.role not in _STREAM_ROLES:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Not authorised")
         return
 
@@ -122,6 +129,7 @@ async def guard_alerts(
         }
     )
 
+    last_checked = time.monotonic()
     try:
         while True:
             try:
@@ -130,6 +138,18 @@ async def guard_alerts(
             except asyncio.TimeoutError:
                 # Idle: prove the socket is still writable, or fail out.
                 await websocket.send_json({"type": "ping"})
+
+            # Deactivation or demotion must end the stream, not just the next
+            # HTTP request. Checked on a clock rather than only when idle, so a
+            # client that keeps sending frames is re-checked too.
+            if time.monotonic() - last_checked >= _REVALIDATE_SECONDS:
+                last_checked = time.monotonic()
+                current = await asyncio.to_thread(_load_user, session_factory, user.id)
+                if current is None or current.role not in _STREAM_ROLES:
+                    await websocket.close(
+                        code=status.WS_1008_POLICY_VIOLATION, reason="Access revoked"
+                    )
+                    break
     except WebSocketDisconnect:
         pass
     except Exception:

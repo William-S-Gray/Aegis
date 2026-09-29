@@ -132,7 +132,15 @@ class RedisStore:
                 "the Redis-backed store."
             ) from exc
 
-        self._redis = redis.Redis.from_url(url, decode_responses=True)
+        # Bounded timeouts: a stalled Redis must fail a login fast rather than
+        # hang the worker thread (or the event loop) indefinitely.
+        self._redis = redis.Redis.from_url(
+            url,
+            decode_responses=True,
+            socket_timeout=2,
+            socket_connect_timeout=2,
+            health_check_interval=30,
+        )
         self._prefix = prefix
 
     def _key(self, key: str) -> str:

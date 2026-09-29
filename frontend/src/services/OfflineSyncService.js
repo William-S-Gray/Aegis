@@ -1,32 +1,47 @@
 import db from '../db';
 import api from '../api';
+import { apiMessage } from '../utils/safe';
+
+let syncing = false;
 
 /**
- * Drains the offline queue of access logs. Stops on the first failure so
- * ordering is preserved and entries are never dropped silently.
+ * Replays one guard's queued decisions, oldest first.
+ *
+ * Only that guard's entries: the server records the caller as the decision
+ * maker, so replaying another guard's queue would falsify the audit trail.
+ *
+ * A transient failure (offline, 5xx, 401, 429) stops the run so ordering is
+ * kept and it retries later. A permanent refusal (e.g. 422) is parked with the
+ * server's reason, because stopping on it would block every later entry
+ * forever.
  */
-export async function syncAccessLogsQueue() {
-  const logs = await db.access_logs_queue.toArray();
-  for (const log of logs) {
-    try {
-      // The shared client attaches the bearer token, so no manual header here.
-      await api.post('/access-logs', log);
-      await db.access_logs_queue.delete(log.id);
-    } catch (err) {
-      // Still offline or the server rejected it: keep the queue intact.
-      break;
+export async function syncAccessLogsQueue(userId) {
+  if (syncing) return; // one run at a time, or a slow run is sent twice
+  syncing = true;
+  try {
+    const logs = await db.access_logs_queue.where('user_id').equals(userId).sortBy('id');
+    for (const log of logs) {
+      if (log.failed) continue;
+      const { id, user_id: _owner, failed: _failed, ...body } = log;
+      try {
+        await api.post('/access-logs', body);
+        await db.access_logs_queue.delete(id);
+      } catch (err) {
+        const status = err?.response?.status;
+        if (!status || status === 401 || status === 429 || status >= 500) break;
+        await db.access_logs_queue.update(id, { failed: apiMessage(err, `HTTP ${status}`) });
+      }
     }
+  } finally {
+    syncing = false;
   }
 }
 
-/**
- * Starts periodic sync. Returns a stop function — the previous implementation
- * leaked its interval because it never exposed one.
- */
-export function startOfflineSync() {
+/** Starts periodic sync for one guard. Returns a stop function. */
+export function startOfflineSync(userId) {
   const intervalId = setInterval(() => {
     if (navigator.onLine) {
-      syncAccessLogsQueue();
+      syncAccessLogsQueue(userId);
     }
   }, 10000);
 

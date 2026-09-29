@@ -49,3 +49,6 @@ backend/vision_service/*.pt
 backups/
 *.dump
 *.dump.sha256
+
+# Prometheus scrape credential
+monitoring/metrics-token

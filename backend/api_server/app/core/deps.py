@@ -81,13 +81,11 @@ require_alert_publisher = require_roles(Role.ADMIN, Role.GUARD, Role.SERVICE)
 
 def client_ip(request: Request) -> str | None:
     """
-    Best-effort client IP.
+    The peer address as resolved by uvicorn.
 
-    X-Forwarded-For is only trustworthy when the app sits behind a proxy that
-    overwrites it; configure the proxy accordingly before relying on this for
-    anything security-critical.
+    X-Forwarded-For is never read here: any client can send it. uvicorn's
+    proxy-header support rewrites request.client from that header only when the
+    TCP peer is listed in FORWARDED_ALLOW_IPS (default 127.0.0.1), so only a
+    trusted proxy can supply the address the throttle and audit log rely on.
     """
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
     return request.client.host if request.client else None

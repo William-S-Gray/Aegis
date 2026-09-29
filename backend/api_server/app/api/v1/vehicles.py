@@ -1,6 +1,6 @@
-import uuid
-
 import math
+import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
@@ -79,12 +79,8 @@ def create_vehicle(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> Vehicle:
+    # VehicleCreate has already refused plates that normalise to nothing.
     normalized = normalize_plate(payload.plate_number)
-    if not normalized:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="plate_number must contain at least one alphanumeric character",
-        )
 
     if db.scalar(select(Vehicle).where(Vehicle.plate_number == normalized)):
         raise HTTPException(
@@ -105,6 +101,7 @@ def create_vehicle(
         color=payload.color,
         vehicle_type=payload.vehicle_type,
         owner_id=payload.owner_id,
+        owner_since=datetime.now(timezone.utc) if payload.owner_id else None,
         site_id=payload.site_id,
     )
     db.add(vehicle)
@@ -142,6 +139,11 @@ def update_vehicle(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown owner_id"
         )
+
+    # A new owner sees history from the transfer onwards, never the previous
+    # owner's comings and goings.
+    if "owner_id" in changes and changes["owner_id"] != vehicle.owner_id:
+        vehicle.owner_since = datetime.now(timezone.utc) if changes["owner_id"] else None
 
     for field, value in changes.items():
         setattr(vehicle, field, value)

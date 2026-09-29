@@ -31,7 +31,7 @@ its integration with the API can be tested. **It fabricates plates.**
 ```bash
 cd backend/vision_service
 python -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements-dev.txt
 
 cp .env.example .env      # set VISION_SERVICE_PASSWORD
 

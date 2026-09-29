@@ -14,4 +14,5 @@ settings = get_settings()
 
 shared_store = build_store(settings.redis_url or None, settings.environment)
 login_throttle = LoginThrottle(shared_store)
+ip_throttle = LoginThrottle(shared_store, max_attempts=settings.login_ip_max_attempts)
 ticket_store = TicketStore(shared_store)

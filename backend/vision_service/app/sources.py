@@ -57,11 +57,16 @@ class VideoSource:
         site_id: str | None = None,
         frame_interval_seconds: float = 1.0,
         reconnect_delay_seconds: float = 5.0,
+        timeout_seconds: float = 10.0,
     ):
         self._uri = uri
         self._site_id = site_id
         self._interval = frame_interval_seconds
         self._reconnect_delay = reconnect_delay_seconds
+        self._timeout_ms = int(timeout_seconds * 1000)
+        # A live stream that drops is reopened; a file that ends is finished.
+        # Reopening a file replays it, re-publishing every plate in it.
+        self._live = is_live(uri)
 
     def frames(self) -> Iterator[Frame]:
         try:
@@ -73,8 +78,20 @@ class VideoSource:
             ) from exc
 
         while True:
-            capture = cv2.VideoCapture(self._uri)
+            # Bounded open and read: without these a stalled camera blocks
+            # capture.read() forever, and the process never sees SIGTERM.
+            capture = cv2.VideoCapture(
+                self._uri,
+                cv2.CAP_FFMPEG,
+                [
+                    cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, self._timeout_ms,
+                    cv2.CAP_PROP_READ_TIMEOUT_MSEC, self._timeout_ms,
+                ],
+            )
             if not capture.isOpened():
+                if not self._live:
+                    logger.error("Could not open %s", self._uri)
+                    return
                 # Cameras drop out; wait and retry rather than exiting.
                 logger.warning("Could not open %s; retrying", self._uri)
                 time.sleep(self._reconnect_delay)
@@ -97,7 +114,14 @@ class VideoSource:
             finally:
                 capture.release()
 
+            if not self._live:
+                return
             time.sleep(self._reconnect_delay)
+
+
+def is_live(uri: str) -> bool:
+    """True for network streams, which are reopened when they drop."""
+    return uri.startswith(("rtsp://", "http://", "https://"))
 
 
 def _load_image(path: Path):

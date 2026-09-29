@@ -18,6 +18,8 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      # Same value as METRICS_TOKEN on the API: printf '%s' "$METRICS_TOKEN" > monitoring/metrics-token
+      - ./monitoring/metrics-token:/etc/prometheus/metrics-token:ro
       - promdata:/prometheus
     ports:
       - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"

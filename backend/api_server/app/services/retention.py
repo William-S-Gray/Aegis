@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -37,8 +37,15 @@ class PurgePlan:
         }
 
 
+CROP_LABEL = "plate_images"
+
+
 def _cutoff(days: int, now: datetime) -> datetime:
     return now - timedelta(days=days)
+
+
+def _crop_expired(cutoff: datetime) -> tuple:
+    return (Alert.created_at < cutoff, Alert.plate_crop.is_not(None))
 
 
 def _policies(now: datetime) -> list[tuple[str, type, object, datetime]]:
@@ -58,7 +65,9 @@ def _policies(now: datetime) -> list[tuple[str, type, object, datetime]]:
         (
             "access_logs",
             AccessLog,
-            AccessLog.timestamp,
+            # Server time, never the client-supplied decision timestamp: a
+            # future-dated row must not outlive its retention period.
+            AccessLog.recorded_at,
             _cutoff(settings.retention_access_log_days, now),
         ),
         ("alerts", Alert, Alert.created_at, _cutoff(settings.retention_alert_days, now)),
@@ -80,6 +89,12 @@ def plan(db: Session, now: datetime | None = None) -> PurgePlan:
         count = db.scalar(select(func.count()).select_from(model).where(column < cutoff)) or 0
         result.counts[label] = count
         result.cutoffs[label] = cutoff
+
+    crop_cutoff = _cutoff(settings.retention_crop_days, now)
+    result.counts[CROP_LABEL] = (
+        db.scalar(select(func.count()).select_from(Alert).where(*_crop_expired(crop_cutoff))) or 0
+    )
+    result.cutoffs[CROP_LABEL] = crop_cutoff
 
     return result
 
@@ -129,6 +144,16 @@ def purge(
                     "cutoff": cutoff.isoformat(),
                 },
             )
+
+    # Plate images are cleared, not deleted with the alert: the alert outlives
+    # its evidence.
+    crop_cutoff = _cutoff(settings.retention_crop_days, now)
+    cleared = db.execute(
+        update(Alert).where(*_crop_expired(crop_cutoff)).values(plate_crop=None)
+    ).rowcount or 0
+    db.commit()
+    removed.counts[CROP_LABEL] = cleared
+    removed.cutoffs[CROP_LABEL] = crop_cutoff
 
     if removed.total:
         # The purge is itself an auditable event. Written after the deletions

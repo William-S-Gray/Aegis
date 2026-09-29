@@ -44,13 +44,40 @@ describe('ReviewQueue', () => {
     expect(screen.getByText(/Not registered/i)).toBeInTheDocument();
   });
 
-  it('pre-fills the box with the machine reading so confirming is one click', async () => {
+  it('does not pre-fill the machine reading', async () => {
+    // A pre-filled box turned review into one click on the detector's guess.
     vi.spyOn(api, 'get').mockResolvedValue({ data: [alertFixture] } as never);
 
     renderPage();
 
     const input = (await screen.findByPlaceholderText(/plate as you read it/i)) as HTMLInputElement;
-    expect(input.value).toBe('A812CD');
+    expect(input.value).toBe('');
+  });
+
+  it('warns when no image of the plate was captured', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
+      if (url.endsWith('/crop')) throw { response: { status: 404 } };
+      return { data: [alertFixture] } as never;
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/no image was captured/i)).toBeInTheDocument();
+  });
+
+  it('drops a row someone else already reviewed', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ data: [alertFixture] } as never);
+    vi.spyOn(api, 'post').mockRejectedValue({
+      response: { status: 409, data: { detail: 'This alert is not awaiting review' } },
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByPlaceholderText(/plate as you read it/i), 'A812CD');
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
+
+    await waitFor(() => expect(screen.queryByText('A812CD')).not.toBeInTheDocument());
   });
 
   it('submits a correction and removes the row', async () => {
@@ -97,7 +124,7 @@ describe('ReviewQueue', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await screen.findByText('A812CD');
+    await user.type(await screen.findByPlaceholderText(/plate as you read it/i), 'A812CD');
     await user.click(screen.getByRole('button', { name: /confirm/i }));
 
     // The operator must not believe a failed save succeeded.

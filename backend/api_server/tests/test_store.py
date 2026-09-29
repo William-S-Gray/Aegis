@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -93,40 +94,48 @@ class TestThrottleOverStore:
     def test_lockout_after_the_threshold(self, store):
         throttle = LoginThrottle(store, max_attempts=3, lockout_seconds=60)
 
-        for _ in range(2):
-            throttle.record_failure("user@example.com")
-        assert throttle.retry_after("user@example.com") == 0
+        assert [throttle.attempt("user@example.com") for _ in range(3)] == [0, 0, 0]
+        assert throttle.attempt("user@example.com") > 0
 
-        throttle.record_failure("user@example.com")
-        assert throttle.retry_after("user@example.com") > 0
+    def test_hammering_a_locked_key_does_not_extend_the_lockout(self, store):
+        """The window is anchored at the first attempt, not the latest."""
+        throttle = LoginThrottle(store, max_attempts=1, lockout_seconds=60)
+        throttle.attempt("k")
 
-    def test_checking_does_not_extend_the_lockout(self, store):
-        """Polling the endpoint must not count as an attempt."""
-        throttle = LoginThrottle(store, max_attempts=2, lockout_seconds=60)
-        throttle.record_failure("k")
+        waits = [throttle.attempt("k") for _ in range(10)]
+        assert all(0 < wait <= 60 for wait in waits)
+        assert waits == sorted(waits, reverse=True)
 
-        for _ in range(10):
-            throttle.retry_after("k")
-
-        # Still one failure short of the threshold.
-        assert throttle.retry_after("k") == 0
-        throttle.record_failure("k")
-        assert throttle.retry_after("k") > 0
+    def test_parallel_attempts_cannot_exceed_the_limit(self, store):
+        """Check-then-increment let every concurrent request through; the
+        atomic increment admits exactly max_attempts."""
+        throttle = LoginThrottle(store, max_attempts=5, lockout_seconds=60)
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            waits = list(pool.map(lambda _: throttle.attempt("k"), range(50)))
+        assert waits.count(0) == 5
 
     def test_reset_clears_the_lockout(self, store):
         throttle = LoginThrottle(store, max_attempts=1, lockout_seconds=60)
-        throttle.record_failure("k")
-        assert throttle.retry_after("k") > 0
+        throttle.attempt("k")
+        assert throttle.attempt("k") > 0
 
         throttle.reset("k")
-        assert throttle.retry_after("k") == 0
+        assert throttle.attempt("k") == 0
 
     def test_keys_are_independent(self, store):
         throttle = LoginThrottle(store, max_attempts=1, lockout_seconds=60)
-        throttle.record_failure("a")
+        throttle.attempt("a")
 
-        assert throttle.retry_after("a") > 0
-        assert throttle.retry_after("b") == 0
+        assert throttle.attempt("a") > 0
+        assert throttle.attempt("b") == 0
+
+    def test_zero_disables_the_limit(self, store):
+        throttle = LoginThrottle(store, max_attempts=0, lockout_seconds=60)
+        assert all(throttle.attempt("k") == 0 for _ in range(20))
+
+    def test_rejection_is_reported_once_per_window(self, store):
+        throttle = LoginThrottle(store, max_attempts=1, lockout_seconds=60)
+        assert [throttle.first_rejection("1.2.3.4") for _ in range(3)] == [True, False, False]
 
 
 class TestTicketsOverStore:

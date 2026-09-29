@@ -16,7 +16,8 @@ interface Vehicle {
   plate_number: string;
   make: string;
   model: string;
-  color: string;
+  // Optional in the register; a vehicle without one used to crash this page.
+  color: string | null;
   owner_id: string;
 }
 
@@ -229,8 +230,8 @@ const UserPortal: React.FC = () => {
                           </HStack>
                           <Text color="gray.600">{vehicle.make} {vehicle.model}</Text>
                           <HStack spacing={2}>
-                            <Box w={3} h={3} bg={vehicle.color.toLowerCase()} borderRadius="full" />
-                            <Text fontSize="sm" color="gray.500">{vehicle.color}</Text>
+                            <Box w={3} h={3} bg={vehicle.color?.toLowerCase() ?? 'gray.300'} borderRadius="full" />
+                            <Text fontSize="sm" color="gray.500">{vehicle.color ?? 'Colour not recorded'}</Text>
                           </HStack>
                         </VStack>
                         <Button size="sm" colorScheme="blue" variant="ghost">
@@ -325,8 +326,8 @@ const UserPortal: React.FC = () => {
                       <Box>
                         <Text fontSize="sm" color="gray.600">Color</Text>
                         <HStack spacing={2}>
-                          <Box w={3} h={3} bg={selectedVehicle.color.toLowerCase()} borderRadius="full" />
-                          <Text>{selectedVehicle.color}</Text>
+                          <Box w={3} h={3} bg={selectedVehicle.color?.toLowerCase() ?? 'gray.300'} borderRadius="full" />
+                          <Text>{selectedVehicle.color ?? 'Not recorded'}</Text>
                         </HStack>
                       </Box>
                     </SimpleGrid>

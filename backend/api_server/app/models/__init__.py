@@ -11,7 +11,7 @@ from app.models.audit import AuditLog
 from app.models.rule import AttributeMismatchRule
 from app.models.site import Site
 from app.models.user import RefreshToken, Role, User
-from app.models.vehicle import Vehicle, normalize_plate
+from app.models.vehicle import PLATE_MAX_LENGTH, Vehicle, normalize_plate
 
 __all__ = [
     "AccessAction",
@@ -23,6 +23,7 @@ __all__ = [
     "AuditLog",
     "FeedbackStatus",
     "MismatchType",
+    "PLATE_MAX_LENGTH",
     "ReviewReason",
     "RefreshToken",
     "Role",

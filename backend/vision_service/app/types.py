@@ -65,6 +65,9 @@ class Observation:
     frame: Frame
     detector_name: str
     detector_version: str
+    # The plate region as captured, for the human reviewer. None when the
+    # frame is not an image array (e.g. the stub without OpenCV).
+    crop: Any = None
 
     @property
     def vehicle_type(self) -> str | None:

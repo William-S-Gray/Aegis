@@ -1,8 +1,9 @@
+import base64
 import math
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -50,6 +51,29 @@ def _load(db: Session, alert_id: uuid.UUID) -> Alert:
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     return alert
+
+
+def _registered_vehicle(db: Session, plate: str) -> Vehicle | None:
+    """
+    The active register entry for a plate.
+
+    A deactivated vehicle is not registered: revoking a vehicle must revoke
+    its "matches register" verdict, or revocation changes nothing at the gate.
+    """
+    return db.scalar(
+        select(Vehicle).where(Vehicle.plate_number == plate, Vehicle.is_active.is_(True))
+    )
+
+
+def _pending_depth(db: Session) -> int:
+    return (
+        db.scalar(
+            select(func.count())
+            .select_from(Alert)
+            .where(Alert.requires_review.is_(True), Alert.reviewed_at.is_(None))
+        )
+        or 0
+    )
 
 
 def _pair_allowed(db: Session, attribute: str, a: str | None, b: str | None) -> bool:
@@ -134,8 +158,10 @@ def review_queue(
         ).all()
     )
 
-    # Reconcile the gauge with the database: counters drift across restarts.
-    metrics.set_review_queue_depth(len(alerts))
+    # Reconcile the gauge with the database. Counted, not len(alerts): the page
+    # is capped by `limit`, and a gauge that cannot exceed the page size never
+    # shows the backlog it exists to alert on.
+    metrics.set_review_queue_depth(_pending_depth(db))
     audit.record(
         db,
         action="alert.review_queue_viewed",
@@ -146,6 +172,36 @@ def review_queue(
     )
     db.commit()
     return alerts
+
+
+@router.get("/{alert_id}/crop")
+def plate_crop(
+    alert_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+) -> Response:
+    """The captured plate image, so a reviewer confirms what they can see."""
+    crop = db.scalar(select(Alert.plate_crop).where(Alert.id == alert_id))
+    if crop is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No image for this alert")
+
+    # Viewing a plate image is a read of personal data.
+    audit.record(
+        db,
+        action="alert.crop_viewed",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="alert",
+        resource_id=str(alert_id),
+    )
+    db.commit()
+    return Response(
+        content=crop,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.post("/{alert_id}/confirm-plate", response_model=AlertPublic)
@@ -162,14 +218,19 @@ def confirm_plate(
     The corrected plate is re-classified against the register, because a
     misread is exactly the case where an "unregistered" flag was wrong.
     """
-    alert = _load(db, alert_id)
-    corrected = normalize_plate(payload.plate_number)
-    if not corrected:
+    # Locked so two reviewers cannot both confirm the same read; the second
+    # waits, then sees it is no longer pending.
+    alert = db.scalar(select(Alert).where(Alert.id == alert_id).with_for_update())
+    if alert is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    if not alert.requires_review or alert.reviewed_at is not None:
+        # Confirmation corrects an uncertain read once. It is not a way to
+        # rewrite the plate on an accepted or already-reviewed alert.
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="plate_number must contain at least one alphanumeric character",
+            status_code=status.HTTP_409_CONFLICT, detail="This alert is not awaiting review"
         )
 
+    corrected = normalize_plate(payload.plate_number)
     was = alert.plate_number
     alert.confirmed_plate = corrected
     alert.plate_number = corrected
@@ -177,7 +238,7 @@ def confirm_plate(
     alert.reviewed_by = current_user.id
     alert.reviewed_at = datetime.now(timezone.utc)
 
-    vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == corrected))
+    vehicle = _registered_vehicle(db, corrected)
     alert.vehicle_id = vehicle.id if vehicle else None
     alert.registered_type = vehicle.vehicle_type if vehicle else None
     alert.registered_color = vehicle.color if vehicle else None
@@ -264,6 +325,22 @@ def create_alert(
     The vision service will call this once it exists; until then it backs
     manual entry from the guard console.
     """
+    if current_user.role == Role.SERVICE:
+        # "No confidence" means a person typed the plate, which skips review.
+        # A machine read must say how sure it is.
+        if payload.plate_confidence is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="plate_confidence is required for automated detections",
+            )
+        if settings.environment != "development" and (payload.detector_name or "").startswith("stub"):
+            # Defence in depth behind the vision service's own check: the stub
+            # fabricates plates and must never reach a real register.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="The stub detector is not accepted outside development",
+            )
+
     if (
         payload.plate_confidence is not None
         and payload.plate_confidence < settings.plate_review_floor_confidence
@@ -280,7 +357,7 @@ def create_alert(
         )
 
     normalized = normalize_plate(payload.plate_number)
-    vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == normalized))
+    vehicle = _registered_vehicle(db, normalized)
 
     alert = Alert(
         plate_number=normalized,
@@ -295,6 +372,7 @@ def create_alert(
         site_id=payload.site_id or (vehicle.site_id if vehicle else None),
         detector_name=payload.detector_name,
         detector_version=payload.detector_version,
+        plate_crop=base64.b64decode(payload.plate_crop_jpeg) if payload.plate_crop_jpeg else None,
     )
     alert.mismatch_type = classify_mismatch(db, alert, vehicle)
 

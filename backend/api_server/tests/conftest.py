@@ -17,12 +17,20 @@ from app.database import Base, get_db, get_session_factory
 from app.main import app
 from app.models import Role, User
 
-# StaticPool keeps a single in-memory database alive across connections.
-engine = create_engine(
-    "sqlite+pysqlite:///:memory:",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
+# SQLite by default for speed. Set TEST_DATABASE_URL to run the same suite on
+# PostgreSQL, which enforces what SQLite ignores: VARCHAR lengths, row locks,
+# and JSONB (CI does both).
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite+pysqlite:///:memory:")
+
+if TEST_DATABASE_URL.startswith("sqlite"):
+    # StaticPool keeps a single in-memory database alive across connections.
+    engine = create_engine(
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+else:
+    engine = create_engine(TEST_DATABASE_URL)
 TestingSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 

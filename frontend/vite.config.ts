@@ -31,19 +31,11 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/localhost:8000\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24, // 1 day
-              },
-            },
-          },
-        ],
+        // config.js is written by the container at start. Precaching it would
+        // pin every returning browser to the values it first saw, whatever the
+        // deployment says now. API responses are never cached either: they
+        // are personal data, and stale access decisions are worse than none.
+        globIgnores: ['config.js'],
       },
     }),
   ],

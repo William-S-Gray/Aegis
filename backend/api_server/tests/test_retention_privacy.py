@@ -3,7 +3,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
-from app.models import AccessAction, AccessLog, Alert, AuditLog, Role, Vehicle, normalize_plate
+from app.models import (
+    AccessAction,
+    AccessLog,
+    Alert,
+    AlertComment,
+    AuditLog,
+    Role,
+    Vehicle,
+    normalize_plate,
+)
 from app.services import privacy, retention
 
 PASSWORD = "correct-horse-battery"
@@ -59,6 +68,7 @@ class TestRetentionPlan:
                 plate_number="OLD001",
                 action=AccessAction.ENTRY,
                 timestamp=utc_days_ago(400),
+                recorded_at=utc_days_ago(400),
             )
         )
         seeded.commit()
@@ -71,6 +81,7 @@ class TestRetentionPlan:
                 plate_number="OLD002",
                 action=AccessAction.ENTRY,
                 timestamp=utc_days_ago(400),
+                recorded_at=utc_days_ago(400),
             )
         )
         seeded.commit()
@@ -92,6 +103,7 @@ class TestPurge:
                 plate_number="OLD003",
                 action=AccessAction.ENTRY,
                 timestamp=utc_days_ago(400),
+                recorded_at=utc_days_ago(400),
             )
         )
         seeded.commit()
@@ -122,6 +134,7 @@ class TestPurge:
                 plate_number="OLD004",
                 action=AccessAction.ENTRY,
                 timestamp=utc_days_ago(400),
+                recorded_at=utc_days_ago(400),
             )
         )
         old_audit = AuditLog(action="ancient.event")
@@ -144,6 +157,7 @@ class TestPurge:
                 plate_number="OLD005",
                 action=AccessAction.ENTRY,
                 timestamp=utc_days_ago(400),
+                recorded_at=utc_days_ago(400),
             )
         )
         seeded.commit()
@@ -161,6 +175,7 @@ class TestPurge:
                     plate_number=f"BULK{i:03d}",
                     action=AccessAction.ENTRY,
                     timestamp=utc_days_ago(400),
+                    recorded_at=utc_days_ago(400),
                 )
             )
         seeded.commit()
@@ -175,6 +190,7 @@ class TestPurge:
                 plate_number="OLD006",
                 action=AccessAction.ENTRY,
                 timestamp=utc_days_ago(400),
+                recorded_at=utc_days_ago(400),
             )
         )
         seeded.commit()
@@ -303,6 +319,7 @@ class TestErasure:
             "alerts": 0,
             "access_logs": 0,
             "audit_entries": 0,
+            "comments": 0,
         }
 
 
@@ -357,3 +374,77 @@ class TestNormalisationAgreement:
     def test_export_and_erase_agree_on_plate_form(self, raw):
         """A mismatch here would erase a different vehicle than the one shown."""
         assert normalize_plate(raw) == "AB12CD"
+
+
+class TestErasureBoundaries:
+    """Erasure matched by substring: erasing one plate rewrote others that
+    contained it, and an input normalising to "" rewrote the whole audit log."""
+
+    def test_a_shorter_plate_does_not_bite_into_a_longer_one(self, seeded):
+        privacy.erase_by_plate(seeded, "AB12")
+
+        other = seeded.scalar(select(AuditLog).where(AuditLog.action == "vehicle.created"))
+        assert other.details == {"plate_number": "AB12CD"}
+
+    def test_an_empty_plate_is_refused_before_anything_changes(self, seeded):
+        before = [entry.details for entry in seeded.scalars(select(AuditLog)).all()]
+
+        with pytest.raises(ValueError):
+            privacy.erase_by_plate(seeded, "- -")
+        with pytest.raises(ValueError):
+            privacy.export_by_plate(seeded, "---")
+
+        assert [entry.details for entry in seeded.scalars(select(AuditLog)).all()] == before
+
+    def test_comments_on_the_subjects_alerts_are_scrubbed(self, seeded):
+        alert = seeded.scalar(select(Alert).where(Alert.plate_number == "AB12CD"))
+        seeded.add(AlertComment(alert_id=alert.id, body="Driver of ab-12 cd was rude"))
+        seeded.commit()
+
+        record = privacy.erase_by_plate(seeded, "AB12CD")
+
+        comment = seeded.scalar(select(AlertComment))
+        assert comment.body == f"Driver of {record['tombstone']} was rude"
+        assert record["counts"]["comments"] == 1
+
+    def test_the_plate_image_is_erased(self, seeded):
+        alert = seeded.scalar(select(Alert).where(Alert.plate_number == "AB12CD"))
+        alert.plate_crop = b"\xff\xd8\xffimage"
+        seeded.commit()
+
+        privacy.erase_by_plate(seeded, "AB12CD")
+
+        seeded.expire_all()
+        assert seeded.get(Alert, alert.id).plate_crop is None
+
+
+class TestPlateImageRetention:
+    def test_old_images_are_cleared_and_the_alert_kept(self, seeded):
+        old = Alert(plate_number="OLD001", created_at=utc_days_ago(60), plate_crop=b"x")
+        recent = Alert(plate_number="NEW001", plate_crop=b"y")
+        seeded.add_all([old, recent])
+        seeded.commit()
+
+        assert retention.plan(seeded).counts["plate_images"] == 1
+        retention.purge(seeded)
+
+        seeded.expire_all()
+        assert seeded.get(Alert, old.id).plate_crop is None
+        assert seeded.get(Alert, recent.id).plate_crop == b"y"
+
+
+class TestRetentionUsesServerTime:
+    def test_a_future_dated_decision_is_still_purged(self, seeded):
+        seeded.add(
+            AccessLog(
+                plate_number="FUTURE1",
+                action=AccessAction.ENTRY,
+                timestamp=datetime.now(timezone.utc) + timedelta(days=3650),
+                recorded_at=utc_days_ago(400),
+            )
+        )
+        seeded.commit()
+
+        retention.purge(seeded)
+
+        assert seeded.scalar(select(AccessLog).where(AccessLog.plate_number == "FUTURE1")) is None

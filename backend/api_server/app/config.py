@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     retention_audit_log_days: int = 730
     retention_access_log_days: int = 365
     retention_alert_days: int = 365
+    # Plate images are the most identifying thing stored; they exist only to
+    # support review, so they go long before the alert row does.
+    retention_crop_days: int = 30
     # Revoked and expired refresh tokens have no value after this.
     retention_refresh_token_days: int = 30
 
@@ -69,6 +72,19 @@ class Settings(BaseSettings):
     # Login throttling
     login_max_attempts: int = 5
     login_lockout_seconds: int = 300
+    # Attempts from one address across all accounts, which is what password
+    # spraying looks like. Counts successes too, so size it above the number of
+    # people who sign in from behind one NAT within the lockout window. 0
+    # disables it (for deployments where every client shares one address).
+    login_ip_max_attempts: int = 100
+
+    # Oldest access decision the offline queue may replay. Older timestamps are
+    # refused, because retention and ordering both depend on them.
+    access_log_max_age_days: int = 7
+
+    # Pooled connections, and the longest any one API query may run.
+    db_pool_size: int = 10
+    db_statement_timeout_ms: int = 15000
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -82,16 +98,22 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    if not settings.secret_key:
-        if settings.is_production:
-            raise RuntimeError(
-                "SECRET_KEY must be set in production. Generate one with: "
-                "python -c 'import secrets; print(secrets.token_urlsafe(48))'"
-            )
-        # Development convenience only: a per-process random key. Restarting the
-        # server invalidates existing tokens, which is the correct trade-off
-        # versus shipping a hardcoded secret that could reach production.
-        import secrets
+    if settings.environment == "development":
+        if not settings.secret_key:
+            # Development convenience only: a per-process random key. Restarting
+            # the server invalidates existing tokens, which is the correct
+            # trade-off versus shipping a hardcoded secret.
+            import secrets
 
-        settings.secret_key = secrets.token_urlsafe(48)
+            settings.secret_key = secrets.token_urlsafe(48)
+        return settings
+
+    # Staging included: a random per-process key there would silently break
+    # every multi-replica deployment, and a short key can be brute-forced
+    # offline from any single token.
+    if len(settings.secret_key) < 32:
+        raise RuntimeError(
+            "SECRET_KEY must be set to at least 32 characters outside development. "
+            "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(48))'"
+        )
     return settings

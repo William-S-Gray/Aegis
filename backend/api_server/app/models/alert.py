@@ -9,6 +9,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    LargeBinary,
     String,
     Text,
     Uuid,
@@ -122,6 +123,11 @@ class Alert(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # The plate as the camera saw it (JPEG), so a reviewer confirms what they
+    # can see rather than re-typing the machine's guess. Deferred: list
+    # endpoints never load it. Personal data with its own, shorter retention.
+    plate_crop: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
 
     # Identifies which detector produced this read, so accuracy can be compared
     # across model versions rather than guessed at.
