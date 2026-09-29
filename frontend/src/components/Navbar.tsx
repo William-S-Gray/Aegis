@@ -9,13 +9,18 @@ import {
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
 import { asArray } from '../utils/safe';
+import { API_BASE_URL } from '../config';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import type { LinkProps as RouterLinkProps } from 'react-router-dom';
 import { 
-  FiUser, FiLogOut, FiSettings, FiBell, FiMenu, FiHome, FiShield, 
+  FiUser, FiLogOut, FiMenu, FiHome, FiShield, 
   FiUsers, FiActivity, FiWifi, FiWifiOff, FiBattery, 
-  FiChevronDown, FiChevronRight, FiHelpCircle, FiCheckSquare
+  FiChevronDown, FiChevronRight, FiCheckSquare
 } from 'react-icons/fi';
+
+type Health = 'online' | 'offline' | 'unknown';
+const HEALTH_COLOR: Record<Health, string> = { online: 'green.500', offline: 'red.500', unknown: 'gray.400' };
+const HEALTH_LABEL: Record<Health, string> = { online: 'online', offline: 'offline', unknown: 'unknown' };
 
 const LinkWithRef = React.forwardRef<HTMLAnchorElement, RouterLinkProps>((props, ref) => (
   <RouterLink ref={ref} {...props} />
@@ -36,24 +41,53 @@ const Navbar: React.FC = () => {
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const textColor = useColorModeValue('gray.700', 'gray.200');
 
-  // State
-  const [notifications, setNotifications] = useState([
-    { id: 1, message: 'New vehicle detected at Main Gate', time: '2 min ago', read: false, type: 'alert' },
-    { id: 2, message: 'System maintenance scheduled for tonight', time: '1 hour ago', read: false, type: 'info' },
-    { id: 3, message: 'Camera 2 connection restored', time: '3 hours ago', read: true, type: 'success' }
-  ]);
-
-  const [systemStatus] = useState({
-    cameras: 'online',
-    database: 'online',
-    api: 'online',
-    websocket: 'online'
+  // Live health, polled. Unknown is shown as grey, never as a hopeful green:
+  // a guard must not see "online" for a system that is down.
+  const [systemStatus, setSystemStatus] = useState<Record<'api' | 'database' | 'cameras', Health>>({
+    api: 'unknown',
+    database: 'unknown',
+    cameras: 'unknown',
   });
 
   // Queue depth, refreshed periodically. Guards should see work waiting
   // without having to open the page to find out.
   const [reviewCount, setReviewCount] = useState(0);
   const canReview = user?.role === 'admin' || user?.role === 'guard';
+
+  useEffect(() => {
+    let cancelled = false;
+    const origin = API_BASE_URL.replace(/\/api\/v\d+$/, '');
+
+    const poll = async () => {
+      let apiHealth: Health = 'offline';
+      let database: Health = 'unknown';
+      try {
+        // /ready answers 503 when the API is up but its database is not.
+        const res = await fetch(`${origin}/ready`, { cache: 'no-store' });
+        apiHealth = 'online';
+        database = res.ok ? 'online' : 'offline';
+      } catch {
+        // Unreachable: the API is down, and the database cannot be judged.
+      }
+      let cameras: Health = 'unknown';
+      if (canReview && apiHealth === 'online') {
+        try {
+          const list = asArray<{ online: boolean }>((await api.get('/cameras')).data);
+          if (list.length) cameras = list.some(c => c.online) ? 'online' : 'offline';
+        } catch {
+          // Leave unknown.
+        }
+      }
+      if (!cancelled) setSystemStatus({ api: apiHealth, database, cameras });
+    };
+
+    poll();
+    const timer = setInterval(poll, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [canReview]);
 
   useEffect(() => {
     if (!canReview) {
@@ -91,14 +125,6 @@ const Navbar: React.FC = () => {
     });
   };
 
-  const handleNotificationClick = (notificationId: number) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === notificationId ? { ...notif, read: true } : notif
-      )
-    );
-  };
-
   const getBreadcrumbs = () => {
     const path = location.pathname;
     if (path === '/') return [{ name: 'Home', path: '/' }];
@@ -126,7 +152,6 @@ const Navbar: React.FC = () => {
     }
   };
 
-  const unreadNotifications = notifications.filter(n => !n.read).length;
 
   return (
     <>
@@ -183,37 +208,39 @@ const Navbar: React.FC = () => {
           {/* System Status Indicators */}
           {!isMobile && (
             <HStack spacing={4} mr={6}>
-              <Tooltip label="Camera System Status">
-                <HStack spacing={1}>
+              {canReview && (
+              <Tooltip label={`Cameras: ${HEALTH_LABEL[systemStatus.cameras]}`}>
+                <HStack spacing={1} aria-label={`Cameras: ${HEALTH_LABEL[systemStatus.cameras]}`}>
                   <Icon 
-                    as={systemStatus.cameras === 'online' ? FiWifi : FiWifiOff} 
+                    as={systemStatus.cameras === 'offline' ? FiWifiOff : FiWifi} 
                     w={4} 
                     h={4} 
-                    color={systemStatus.cameras === 'online' ? 'green.500' : 'red.500'} 
+                    color={HEALTH_COLOR[systemStatus.cameras]} 
                   />
                   <Text fontSize="xs" color="gray.500">Cameras</Text>
                 </HStack>
               </Tooltip>
+              )}
               
-              <Tooltip label="Database Status">
-                <HStack spacing={1}>
+              <Tooltip label={`Database: ${HEALTH_LABEL[systemStatus.database]}`}>
+                <HStack spacing={1} aria-label={`Database: ${HEALTH_LABEL[systemStatus.database]}`}>
                   <Icon 
                     as={FiBattery} 
                     w={4} 
                     h={4} 
-                    color={systemStatus.database === 'online' ? 'green.500' : 'red.500'} 
+                    color={HEALTH_COLOR[systemStatus.database]} 
                   />
                   <Text fontSize="xs" color="gray.500">DB</Text>
                 </HStack>
               </Tooltip>
               
-              <Tooltip label="API Status">
-                <HStack spacing={1}>
+              <Tooltip label={`API: ${HEALTH_LABEL[systemStatus.api]}`}>
+                <HStack spacing={1} aria-label={`API: ${HEALTH_LABEL[systemStatus.api]}`}>
                   <Icon 
                     as={FiActivity} 
                     w={4} 
                     h={4} 
-                    color={systemStatus.api === 'online' ? 'green.500' : 'red.500'} 
+                    color={HEALTH_COLOR[systemStatus.api]} 
                   />
                   <Text fontSize="xs" color="gray.500">API</Text>
                 </HStack>
@@ -364,81 +391,6 @@ const Navbar: React.FC = () => {
             </HStack>
           )}
 
-          {/* Notifications */}
-          {user && (
-            <Menu>
-              <MenuButton
-                as={IconButton}
-                icon={
-                  <Box position="relative">
-                    <Icon as={FiBell} w={5} h={5} />
-                    {unreadNotifications > 0 && (
-                      <Badge
-                        position="absolute"
-                        top="-8px"
-                        right="-8px"
-                        colorScheme="red"
-                        borderRadius="full"
-                        fontSize="xs"
-                        minW="18px"
-                        h="18px"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        {unreadNotifications}
-                      </Badge>
-                    )}
-                  </Box>
-                }
-                variant="neumorphic"
-                size="md"
-                mr={4}
-                _hover={{
-                  bg: 'blue.50',
-                  color: 'blue.600',
-                  boxShadow: '4px 4px 8px #bfdbfe, -4px -4px 8px #ffffff',
-                }}
-              />
-              <MenuList
-                boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
-                border="1px solid"
-                borderColor={borderColor}
-                borderRadius="xl"
-                maxH="400px"
-                overflowY="auto"
-              >
-                <Box px={4} py={2} borderBottom="1px solid" borderColor={borderColor}>
-                  <Text fontWeight="bold" fontSize="sm">Notifications</Text>
-                </Box>
-                {notifications.length === 0 ? (
-                  <Box px={4} py={6} textAlign="center">
-                    <Text color="gray.500" fontSize="sm">No notifications</Text>
-                  </Box>
-                ) : (
-                  notifications.map((notification) => (
-                    <MenuItem
-                      key={notification.id}
-                      onClick={() => handleNotificationClick(notification.id)}
-                      bg={notification.read ? 'transparent' : 'blue.50'}
-                      _hover={{ bg: 'gray.50' }}
-                      py={3}
-                    >
-                      <VStack align="start" spacing={1} w="full">
-                        <Text fontSize="sm" fontWeight={notification.read ? 'normal' : 'semibold'}>
-                          {notification.message}
-                        </Text>
-                        <Text fontSize="xs" color="gray.500">
-                          {notification.time}
-                        </Text>
-                      </VStack>
-                    </MenuItem>
-                  ))
-                )}
-              </MenuList>
-            </Menu>
-          )}
-
           {/* User Menu */}
           {user && (
             <Menu>
@@ -470,14 +422,8 @@ const Navbar: React.FC = () => {
                 borderColor={borderColor}
                 borderRadius="xl"
               >
-                <MenuItem icon={<Icon as={FiUser} />}>
-                  Profile
-                </MenuItem>
-                <MenuItem icon={<Icon as={FiSettings} />}>
-                  Settings
-                </MenuItem>
-                <MenuItem icon={<Icon as={FiHelpCircle} />}>
-                  Help & Support
+                <MenuItem icon={<Icon as={FiUser} />} onClick={() => navigate('/user')}>
+                  My vehicles
                 </MenuItem>
                 <MenuDivider />
                 <MenuItem icon={<Icon as={FiLogOut} />} onClick={handleLogout} color="red.500">
