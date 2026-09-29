@@ -98,6 +98,13 @@ export default function GuardAlertHistory() {
       api.post(`/alerts/${alertId}/status`, { status }),
       "Failed to update status"
     );
+  // The verdict is what analytics and model tuning learn from; status is only
+  // where the alert is in the workflow.
+  const updateVerdict = (alert, feedbackStatus) =>
+    runAlertAction(
+      api.post(`/alerts/${alert.id}/status`, { status: alert.status, feedback_status: feedbackStatus }),
+      "Failed to record verdict"
+    );
   const addComment = (alertId, commentText) => {
     if (!commentText || !commentText.trim()) return;
     runAlertAction(
@@ -139,6 +146,7 @@ export default function GuardAlertHistory() {
             {exportCols.map(col => <Th key={col.key}>{col.label}</Th>)}
             <Th>Assigned To</Th>
             <Th>Status</Th>
+            <Th>Verdict</Th>
             <Th>Comments</Th>
             <Th>Actions</Th>
           </Tr>
@@ -160,10 +168,23 @@ export default function GuardAlertHistory() {
                 </Menu>
               </Td>
               <Td>
-                <Select size="xs" value={alert.status} onChange={e => updateStatus(alert.id, e.target.value)}>
+                <Select size="xs" aria-label={`Status for ${alert.plate_number}`} value={alert.status} onChange={e => updateStatus(alert.id, e.target.value)}>
                   <option value="open">Open</option>
                   <option value="in_progress">In Progress</option>
                   <option value="closed">Closed</option>
+                </Select>
+              </Td>
+              <Td>
+                <Select
+                  size="xs"
+                  aria-label={`Verdict for ${alert.plate_number}`}
+                  value={alert.feedback_status}
+                  onChange={e => updateVerdict(alert, e.target.value)}
+                >
+                  <option value="pending">Pending</option>
+                  <option value="false_alarm">False alarm</option>
+                  <option value="investigated">Investigated</option>
+                  <option value="escalated">Escalated</option>
                 </Select>
               </Td>
               <Td>
