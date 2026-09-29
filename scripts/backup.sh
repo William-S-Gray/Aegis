@@ -40,8 +40,8 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
   exit 1
 fi
 
-# SQLAlchemy's driver suffix is not understood by libpq.
-PG_URL="${DATABASE_URL/postgresql+psycopg:\/\//postgresql://}"
+source "$(dirname "${BASH_SOURCE[0]}")/pg-url.sh"
+pg_url_split "$DATABASE_URL"
 
 mkdir -p "$OUT_DIR"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"

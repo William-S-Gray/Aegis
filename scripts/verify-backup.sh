@@ -36,6 +36,10 @@ DUMP="${1:?usage: verify-backup.sh <dump-file>}"
 ADMIN_URL="${VERIFY_ADMIN_URL:-postgresql://aegis:aegis@localhost:5435/postgres}"
 SCRATCH_DB="aegis_verify_$(date -u +%s)"
 
+source "$(dirname "${BASH_SOURCE[0]}")/pg-url.sh"
+pg_url_split "$ADMIN_URL"
+ADMIN_URL="$PG_URL"
+
 PLAIN=""
 cleanup() {
   psql "$ADMIN_URL" -q -c "DROP DATABASE IF EXISTS $SCRATCH_DB;" >/dev/null 2>&1 || true

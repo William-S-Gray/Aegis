@@ -45,7 +45,8 @@ if [[ -f "$DUMP.sha256" ]]; then
   sha256sum --check "$DUMP.sha256"
 fi
 
-PG_URL="${TARGET_URL/postgresql+psycopg:\/\//postgresql://}"
+source "$(dirname "${BASH_SOURCE[0]}")/pg-url.sh"
+pg_url_split "$TARGET_URL"
 
 PLAIN="$(maybe_decrypt "$DUMP")"
 if [[ "$PLAIN" != "$DUMP" ]]; then

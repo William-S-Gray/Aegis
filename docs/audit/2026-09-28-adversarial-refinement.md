@@ -105,9 +105,9 @@ changed; see the risk register).
 | ID | Where | Issue | Resolution |
 |---|---|---|---|
 | F-014 | `config.py` | Weak or missing `SECRET_KEY` accepted outside production | **Fixed.** At least 32 characters required everywhere except development |
-| F-015 | `scripts/backup.sh` | DB password visible in the process list during `pg_dump` | **Open** (R-012) |
+| F-015 | `scripts/backup.sh` | DB password visible in the process list during `pg_dump` | **Fixed** (2026-09-30). `scripts/pg-url.sh` moves the password into `PGPASSWORD` for backup, verify, and restore; restore no longer prints it |
 | F-016, F-048 | repo root, `backend/test_camera.py` | Orphan manifests with a vulnerable `xlsx`; a script with a private LAN address | **Fixed.** Deleted |
-| F-037 | `analytics.py` | Time-to-resolution computed in Python | **Open** (R-013) |
+| F-037 | `analytics.py` | Time-to-resolution computed in Python | **Fixed** (2026-09-30). Averaged in SQL (`extract(epoch)` on PostgreSQL, `julianday` on SQLite); `test_time_to_resolution_is_the_mean_of_closed_alerts` |
 | F-040 | `database.py` | No pool, connect, or statement timeouts | **Fixed.** Pool 10+10, `pool_timeout` 10 s, connect 5 s, `statement_timeout` 15 s (0 for the CLI, migrate, and purge) |
 | F-042 | `alembic/env.py` | `%` in a DB password broke migrations | **Fixed** |
 | F-045 | compose | The CORS default was the API's own origin | **Fixed.** Now `http://localhost:8080` |
@@ -185,8 +185,8 @@ removes this (R-001).
 | R-009 | Decisions queued before this release are parked, not synced | Certain once / Low | They carry no owner and cannot be attributed honestly | Visible in IndexedDB with a reason | No admin UI yet; drain the queues before upgrading consoles |
 | R-010 | The guard console's camera feed (`MEDIA_URL/video_feed`) is unauthenticated | Deployment-dependent / Medium | Served by a separate camera host, outside this codebase | CSP limits image origins | Needs a media proxy with authentication |
 | R-011 | A service account can upload any JPEG, which guards will see | Low / Low | Content cannot be verified | JPEG magic check; size cap; audited | The service host is already trusted to report plates |
-| R-012 | Backup script exposes the DB password in `ps` (F-015) | Low / Medium | Not fixed in this pass | Backup hosts are single-purpose | Next pass: pass the password via `PGPASSWORD`/`.pgpass` |
-| R-013 | Time-to-resolution analytics are computed in Python (F-037) | Low / Low | Needs dialect-specific SQL | Windowed queries | Negligible at current volumes |
+| R-012 | Backup script exposes the DB password in `ps` (F-015) | Low / Medium | **Closed 2026-09-30** | Password passed via `PGPASSWORD` | — |
+| R-013 | Time-to-resolution analytics are computed in Python (F-037) | Low / Low | **Closed 2026-09-30** | Aggregated in SQL | — |
 | R-014 | Blocking I/O can be added to an `async` route unnoticed | Medium / Medium | No lint rule exists for it | Both known cases fixed | Revisit if async routes grow |
 | R-015 | Files listed under "Not read" were not audited | — | Scope | — | Audit them before relying on this report for those areas |
 

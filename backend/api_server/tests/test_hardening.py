@@ -404,3 +404,13 @@ class TestAccessLogs:
 class TestReadiness:
     def test_ready_checks_the_database(self, client):
         assert client.get("/ready").json() == {"status": "ready"}
+
+
+class TestCliCreateUser:
+    def test_rejects_an_email_the_api_cannot_serve(self, capsys):
+        from app.cli import create_user
+
+        # Reserved domains pass a naive check but fail the API's EmailStr, which
+        # made GET /users return 500 for every admin once one such row existed.
+        assert create_user("admin@aegis.local", "Admin", "admin") == 1
+        assert "Invalid email" in capsys.readouterr().err
