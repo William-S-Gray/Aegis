@@ -41,6 +41,9 @@ class VisionSettings(BaseSettings):
     # ---- Capture --------------------------------------------------------
     sources: str = ""
     frame_interval_seconds: float = 1.0
+    # How often each camera's live preview is pushed to the guard console;
+    # 0 turns previews off.
+    preview_interval_seconds: float = 1.0
 
     # A plate seen repeatedly in consecutive frames is one event, not many.
     dedupe_window_seconds: float = 30.0

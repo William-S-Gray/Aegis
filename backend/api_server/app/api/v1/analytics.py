@@ -139,29 +139,19 @@ def time_to_resolution(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> ResolutionSummary:
-    """
-    Mean minutes from alert creation to closure.
-
-    Computed in Python over resolved rows: the SQL for a portable timestamp
-    difference diverges between PostgreSQL and SQLite, and the resolved set is
-    small enough that clarity beats a dialect-specific expression. Revisit with
-    a dialect-aware aggregate if this table grows large.
-    """
+    """Mean minutes from alert creation to closure, aggregated in the database."""
+    if db.get_bind().dialect.name == "postgresql":
+        minutes = func.extract("epoch", Alert.resolved_at - Alert.created_at) / 60
+    else:
+        # SQLite stores UTC timestamps as text; julianday() parses them into days.
+        minutes = (func.julianday(Alert.resolved_at) - func.julianday(Alert.created_at)) * 1440
     query = window.apply(
-        select(Alert.created_at, Alert.resolved_at)
+        select(func.avg(minutes))
         .where(Alert.resolved_at.is_not(None))
         .where(Alert.status == AlertStatus.CLOSED)
     )
-
-    durations = []
-    for created_at, resolved_at in db.execute(query).all():
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
-        if resolved_at.tzinfo is None:
-            resolved_at = resolved_at.replace(tzinfo=timezone.utc)
-        durations.append((resolved_at - created_at).total_seconds() / 60)
-
-    average = sum(durations) / len(durations) if durations else 0.0
+    average = db.scalar(query)
+    average = float(average) if average is not None else 0.0
     return ResolutionSummary(average_time_to_resolution_minutes=round(average, 2))
 
 

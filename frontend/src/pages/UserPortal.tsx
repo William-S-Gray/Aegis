@@ -49,8 +49,12 @@ const UserPortal: React.FC = () => {
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
+  // Keyed on identity, not the object: a new object for the same user must not
+  // refetch and flash the spinner.
+  const userId = user?.id;
+
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     let cancelled = false;
     setLoading(true);
 
@@ -97,7 +101,7 @@ const UserPortal: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
   const handleVehicleClick = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);

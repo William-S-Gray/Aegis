@@ -23,8 +23,8 @@ The service refuses to start with the stub outside development.
 
 ```
                  ┌───────────────┐
-  cameras ─────► │ vision_service│ ── POST /alerts ──┐
-                 └───────────────┘                   ▼
+  cameras ─────► │ vision_service│ ── POST /alerts ──────┐
+                 └───────────────┘ ── PUT /cameras/…/frame ▼
                                               ┌─────────────┐   WebSocket
   browser ◄──────────── frontend ◄────────────│ api_server  │──────────────► guards
                                               └──────┬──────┘

@@ -765,6 +765,22 @@ class TestAnalytics:
         body = client.get("/api/v1/analytics/time-to-resolution", headers=seeded).json()
         assert body["average_time_to_resolution_minutes"] >= 0
 
+    def test_time_to_resolution_is_the_mean_of_closed_alerts(self, client, seeded, db):
+        created = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        alerts = db.scalars(select(Alert).order_by(Alert.status)).all()
+        closed = [a for a in alerts if a.status == AlertStatus.CLOSED]
+        still_open = next(a for a in alerts if a.status != AlertStatus.CLOSED)
+        for alert, minutes in zip(closed, (10, 30)):
+            alert.created_at = created
+            alert.resolved_at = created + timedelta(minutes=minutes)
+        # A stamp left on an open (reopened) alert must not count.
+        still_open.created_at = created
+        still_open.resolved_at = created + timedelta(minutes=500)
+        db.commit()
+
+        body = client.get("/api/v1/analytics/time-to-resolution", headers=seeded).json()
+        assert body["average_time_to_resolution_minutes"] == 20.0
+
     def test_endpoints_are_safe_when_there_is_no_data(self, client, auth):
         headers = auth(Role.ADMIN)
         assert client.get("/api/v1/analytics/mismatches", headers=headers).json() == []

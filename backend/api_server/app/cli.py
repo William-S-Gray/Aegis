@@ -18,6 +18,7 @@ import os
 import sys
 from pathlib import Path
 
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select, text
 
 from app.core.security import hash_password
@@ -42,6 +43,13 @@ def _session():
 
 def create_user(email: str, full_name: str, role: str) -> int:
     email = email.strip().lower()
+    # The same check the API applies: an address it cannot serialize would make
+    # every user listing fail, and the account could never sign in.
+    try:
+        TypeAdapter(EmailStr).validate_python(email)
+    except ValidationError as exc:
+        print(f"Invalid email {email}: {exc.errors()[0]['msg']}", file=sys.stderr)
+        return 1
 
     password = os.environ.get("AEGIS_PASSWORD")
     if not password:

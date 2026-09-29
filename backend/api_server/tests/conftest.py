@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.security import hash_password
+from app.api.v1.cameras import camera_frames
 from app.core.state import login_throttle
 from app.database import Base, get_db, get_session_factory
 from app.main import app
@@ -38,6 +39,7 @@ TestingSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=Fals
 def _reset_state():
     Base.metadata.create_all(bind=engine)
     login_throttle.clear()
+    camera_frames.clear()
     yield
     Base.metadata.drop_all(bind=engine)
 

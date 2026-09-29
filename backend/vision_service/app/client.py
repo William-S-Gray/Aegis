@@ -77,8 +77,9 @@ class AegisClient:
         return {"Authorization": f"Bearer {self._access_token}"}
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        extra = kwargs.pop("headers", {})
         with self._lock:
-            headers = self._headers()
+            headers = {**self._headers(), **extra}
 
         response = self._client.request(method, path, headers=headers, **kwargs)
 
@@ -86,7 +87,7 @@ class AegisClient:
             # The token expired mid-run; re-authenticate once and retry.
             with self._lock:
                 self._access_token = None
-                headers = self._headers()
+                headers = {**self._headers(), **extra}
             response = self._client.request(method, path, headers=headers, **kwargs)
 
         return response
@@ -138,6 +139,27 @@ class AegisClient:
             response.text,
         )
         return None
+
+    def put_frame(self, camera_id: str, name: str, jpeg: bytes) -> bool:
+        """
+        Replace a camera's live preview. One attempt, never raises: a missed
+        preview frame is replaced by the next one, so retrying is pointless.
+        """
+        try:
+            response = self._request(
+                "PUT",
+                f"/cameras/{camera_id}/frame",
+                params={"name": name},
+                content=jpeg,
+                headers={"Content-Type": "image/jpeg"},
+                timeout=3.0,
+            )
+        except (LoginRefused, httpx.HTTPError):
+            logger.debug("Preview frame not delivered", exc_info=True)
+            return False
+        if response.status_code != 204:
+            logger.debug("Preview frame refused (%s)", response.status_code)
+        return response.status_code == 204
 
     def close(self) -> None:
         self._client.close()

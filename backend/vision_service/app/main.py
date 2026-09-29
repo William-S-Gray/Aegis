@@ -4,6 +4,7 @@ import argparse
 import logging
 import signal
 import sys
+import threading
 from types import FrameType
 
 import json
@@ -15,18 +16,18 @@ from app.config import VisionSettings, get_settings
 from app.detectors.stub import StubPlateDetector, StubPlateReader
 from app.logging_config import configure_logging, run_id_var, source_var
 from app.pipeline import Pipeline
+from app.preview import Preview
 from app.sources import ImageDirectorySource, VideoSource
 from app.types import PlateDetector, PlateReader
 
 logger = logging.getLogger("aegis.vision")
 
-_shutdown = False
+_stop = threading.Event()
 
 
 def _handle_signal(signum: int, _frame: FrameType | None) -> None:
-    global _shutdown
     logger.info("Received signal %s; finishing the current frame and stopping", signum)
-    _shutdown = True
+    _stop.set()
 
 
 def build_detector(settings: VisionSettings) -> tuple[PlateDetector, PlateReader]:
@@ -66,6 +67,7 @@ def build_source(uri: str, settings: VisionSettings):
             uri,
             site_id=settings.site_id,
             frame_interval_seconds=settings.frame_interval_seconds,
+            stop=_stop,
         )
     return ImageDirectorySource(uri, site_id=settings.site_id)
 
@@ -100,6 +102,8 @@ def run(settings: VisionSettings, once: bool = False) -> int:
             dedupe_window_seconds=settings.dedupe_window_seconds,
         )
 
+        preview = Preview(client, settings.preview_interval_seconds)
+
         run_id = uuid.uuid4().hex[:12]
         run_id_var.set(run_id)
 
@@ -107,12 +111,13 @@ def run(settings: VisionSettings, once: bool = False) -> int:
             source_var.set(uri)
             logger.info("Processing source", extra={"uri": uri})
             for frame in build_source(uri, settings).frames():
-                if _shutdown:
+                if _stop.is_set():
                     break
                 pipeline.process(frame)
+                preview.offer(uri, frame.image)
                 if once:
                     break
-            if _shutdown or once:
+            if _stop.is_set() or once:
                 break
 
         stats = pipeline.stats.as_dict()

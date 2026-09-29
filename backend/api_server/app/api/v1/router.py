@@ -4,6 +4,7 @@ from app.api.v1 import (
     alerts,
     analytics,
     auth,
+    cameras,
     logs,
     realtime,
     rules,
@@ -22,3 +23,4 @@ api_router.include_router(alerts.router)
 api_router.include_router(rules.router)
 api_router.include_router(analytics.router)
 api_router.include_router(realtime.router)
+api_router.include_router(cameras.router)

@@ -109,6 +109,20 @@ the next model.
 A car waiting at a barrier appears in every frame. `VISION_DEDUPE_WINDOW_SECONDS`
 (default 30s) collapses repeat sightings so one arrival is one alert.
 
+## Live preview for guards
+
+Each camera's frames are also pushed to the API (`PUT /cameras/{id}/frame`,
+service role only), at most once per `VISION_PREVIEW_INTERVAL_SECONDS`
+(default 1; 0 turns previews off). The guard console fetches them with the
+guard's own session, so cameras are never exposed to browsers and no view is
+possible without signing in. The API keeps only the latest frame per camera, in
+memory, and audits a guard's viewing once per camera every five minutes.
+
+Previews run at the capture rate: raise it with `VISION_FRAME_INTERVAL_SECONDS`,
+which also raises detection load. The camera's name shown to guards is its
+host and path; credentials in a stream URL are never sent. Reading RTSP/MJPEG
+needs OpenCV (`requirements-ml.txt`, or `INCLUDE_ML=true` for the image).
+
 ## Before production
 
 - Replace the stub; the service refuses to run with it outside development.

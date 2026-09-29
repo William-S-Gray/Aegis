@@ -110,7 +110,6 @@ services:
       # Resolved at container start into config.js, so this image is not tied
       # to a single environment.
       API_URL: ${PUBLIC_API_URL:-http://localhost:8081/api/v1}
-      MEDIA_URL: ${PUBLIC_MEDIA_URL:-http://localhost:8081}
       ENABLE_MOCK_AUTH: "false"
     ports:
       - "${FRONTEND_PORT:-8080}:8080"
@@ -133,6 +132,7 @@ services:
       VISION_READER: ${VISION_READER:-stub}
       VISION_MODEL_PATH: ${VISION_MODEL_PATH:-}
       VISION_SOURCES: ${VISION_SOURCES:-/data/samples}
+      VISION_PREVIEW_INTERVAL_SECONDS: ${VISION_PREVIEW_INTERVAL_SECONDS:-1}
       VISION_LOG_LEVEL: ${LOG_LEVEL:-INFO}
       VISION_LOG_JSON: ${LOG_JSON:-true}
     volumes:

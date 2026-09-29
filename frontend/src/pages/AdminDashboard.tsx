@@ -41,13 +41,7 @@ import {
   useColorModeValue,
   Progress,
   Grid,
-  FormControl,
-  Slider,
-  SliderTrack,
-  SliderFilledTrack,
-  SliderThumb,
-  FormHelperText,
-  Switch
+  FormControl
 } from '@chakra-ui/react';
 import {
   FiUsers,
@@ -56,14 +50,13 @@ import {
   FiAlertTriangle,
   
   
-  FiDownload,
   FiRefreshCw,
   FiTrendingUp,
   
   FiShield,
   FiClock,
-  FiMapPin,
 } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { mockAuthEnabled } from '../config';
 import { asArray, asObject, asNumber, apiMessage } from '../utils/safe';
@@ -96,12 +89,12 @@ interface Log {
   vehicle_id: string;
 }
 
-interface ReportData {
-  totalAccess?: number;
-  authorizedAccess?: number;
-  unauthorizedAccess?: number;
-  alerts?: number;
-  systemUptime?: number;
+interface RecentAlert {
+  id: string;
+  plate_number: string;
+  mismatch_type: string;
+  status: string;
+  timestamp: string;
 }
 
 interface Analytics {
@@ -110,7 +103,7 @@ interface Analytics {
   totalLogs: number;
   activeUsers: number;
   weeklyGrowth: number;
-  monthlyAlerts: number;
+  pendingAlerts: number;
 }
 
 /*
@@ -145,42 +138,8 @@ const AdminDashboard: React.FC = () => {
   });
   const [loadError, setLoadError] = useState('');
 
-  const [recentAlerts] = useState([
-    {
-      id: 1,
-      type: 'Unauthorized Access',
-      vehicle: 'ABC-123',
-      location: 'Main Gate',
-      time: '2 minutes ago',
-      status: 'Active',
-      severity: 'High'
-    },
-    {
-      id: 2,
-      type: 'Vehicle Not Found',
-      vehicle: 'XYZ-789',
-      location: 'Side Entrance',
-      time: '15 minutes ago',
-      status: 'Resolved',
-      severity: 'Medium'
-    },
-    {
-      id: 3,
-      type: 'System Alert',
-      vehicle: 'N/A',
-      location: 'Camera 3',
-      time: '1 hour ago',
-      status: 'Active',
-      severity: 'Low'
-    }
-  ]);
-
-  const [recentActivity] = useState([
-    { id: 1, user: 'John Doe', action: 'Vehicle registered', time: '5 min ago', type: 'success' },
-    { id: 2, user: 'Jane Smith', action: 'Access granted', time: '12 min ago', type: 'info' },
-    { id: 3, user: 'Mike Johnson', action: 'User account created', time: '1 hour ago', type: 'success' },
-    { id: 4, user: 'Sarah Wilson', action: 'Alert acknowledged', time: '2 hours ago', type: 'warning' }
-  ]);
+  const [recentAlerts, setRecentAlerts] = useState<RecentAlert[]>([]);
+  const navigate = useNavigate();
 
   // User Management
   const [users, setUsers] = useState<User[]>([]);
@@ -214,27 +173,29 @@ const AdminDashboard: React.FC = () => {
     totalLogs: 0,
     activeUsers: 0,
     weeklyGrowth: 0,
-    monthlyAlerts: 0
+    pendingAlerts: 0
   });
-
-  // Security Settings Modal
-  const { isOpen: isSecurityOpen, onOpen: onSecurityOpen, onClose: onSecurityClose } = useDisclosure();
-  const [securitySettings, setSecuritySettings] = useState({
-    cameraSensitivity: 75,
-    alertThreshold: 3,
-    autoLock: true,
-    emergencyMode: false,
-    backupFrequency: 'daily'
-  });
-
-  // System Reports Modal
-  const { isOpen: isReportsOpen, onOpen: onReportsOpen, onClose: onReportsClose } = useDisclosure();
-  const [selectedReport, setSelectedReport] = useState('daily');
-  const [reportData, setReportData] = useState<ReportData | null>(null);
-  const [generatingReport, setGeneratingReport] = useState(false);
 
   // Responsive design
   const cardBg = useColorModeValue('white', 'gray.700');
+
+  // Recent alerts, and how many still await a guard's decision
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      api.get('/alerts', { params: { limit: 3 } }),
+      api.get('/alerts', { params: { limit: 1, feedback_status: 'pending' } }),
+    ])
+      .then(([recent, pending]) => {
+        if (cancelled) return;
+        setRecentAlerts(asArray<RecentAlert>(asObject<{ alerts: unknown }>(recent.data).alerts));
+        setAnalytics(prev => ({ ...prev, pendingAlerts: asNumber(asObject<{ total: number }>(pending.data).total) }));
+      })
+      .catch(error => {
+        if (!cancelled) setLoadError(apiMessage(error, 'Failed to load alerts'));
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch users
   useEffect(() => {
@@ -405,90 +366,6 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Security Settings Handlers
-  const handleSecuritySettingChange = (setting: string, value: string | number | boolean) => {
-    setSecuritySettings(prev => ({
-      ...prev,
-      [setting]: value
-    }));
-  };
-
-  const handleSecuritySave = () => {
-    // Mock save - in real app, this would be an API call
-    toast({ 
-      title: 'Security Settings Updated', 
-      description: 'Your security settings have been saved successfully',
-      status: 'success' 
-    });
-    onSecurityClose();
-  };
-
-  // System Reports Handlers
-  const generateReport = async () => {
-    setGeneratingReport(true);
-    try {
-      // Mock report generation - in real app, this would be an API call
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API delay
-      
-      const mockReportData = {
-        daily: {
-          totalAccess: 156,
-          authorizedAccess: 142,
-          unauthorizedAccess: 14,
-          alerts: 8,
-          systemUptime: 99.9
-        },
-        weekly: {
-          totalAccess: 1089,
-          authorizedAccess: 1023,
-          unauthorizedAccess: 66,
-          alerts: 45,
-          systemUptime: 99.7
-        },
-        monthly: {
-          totalAccess: 4567,
-          authorizedAccess: 4321,
-          unauthorizedAccess: 246,
-          alerts: 189,
-          systemUptime: 99.5
-        }
-      };
-      
-      setReportData(mockReportData[selectedReport as keyof typeof mockReportData]);
-      toast({ 
-        title: 'Report Generated', 
-        description: `${selectedReport.charAt(0).toUpperCase() + selectedReport.slice(1)} report has been generated successfully`,
-        status: 'success' 
-      });
-    } catch (error) {
-      toast({ 
-        title: 'Error', 
-        description: 'Failed to generate report', 
-        status: 'error' 
-      });
-    } finally {
-      setGeneratingReport(false);
-    }
-  };
-
-  const exportReport = () => {
-    if (!reportData) {
-      toast({ 
-        title: 'No Report', 
-        description: 'Please generate a report first', 
-        status: 'warning' 
-      });
-      return;
-    }
-    
-    // Mock export - in real app, this would download a file
-    toast({ 
-      title: 'Report Exported', 
-      description: 'Report has been exported successfully',
-      status: 'success' 
-    });
-  };
-
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin': return 'purple';
@@ -498,30 +375,12 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'High': return 'red';
-      case 'Medium': return 'orange';
-      case 'Low': return 'yellow';
-      default: return 'gray';
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Active': return 'red';
-      case 'Resolved': return 'green';
-      case 'Pending': return 'yellow';
+      case 'open': return 'red';
+      case 'in_progress': return 'yellow';
+      case 'closed': return 'green';
       default: return 'gray';
-    }
-  };
-
-  const getActivityColor = (type: string) => {
-    switch (type) {
-      case 'success': return 'green';
-      case 'warning': return 'orange';
-      case 'error': return 'red';
-      default: return 'blue';
     }
   };
 
@@ -569,18 +428,6 @@ const AdminDashboard: React.FC = () => {
                 }}
               >
                 Refresh
-              </Button>
-              <Button
-                leftIcon={<FiDownload />}
-                variant="neumorphic"
-                size="sm"
-                _hover={{
-                  bg: 'brand.50',
-                  color: 'brand.600',
-                  boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
-                }}
-              >
-                Export
               </Button>
             </HStack>
           </HStack>
@@ -698,9 +545,9 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {analytics.monthlyAlerts}
+                  {analytics.pendingAlerts}
                 </StatNumber>
-                <StatLabel color="gray.600" fontSize="sm">Active Alerts</StatLabel>
+                <StatLabel color="gray.600" fontSize="sm">Pending Alerts</StatLabel>
               </Stat>
             </VStack>
           </HStack>
@@ -840,7 +687,7 @@ const AdminDashboard: React.FC = () => {
           <Box p={6} borderBottom="1px solid" borderColor="gray.200">
             <HStack justify="space-between">
               <Heading size="md" color="gray.700">Recent Alerts</Heading>
-              <Button size="sm" variant="ghost" color="brand.500">
+              <Button size="sm" variant="ghost" color="brand.500" onClick={() => navigate('/alert-history')}>
                 View All
               </Button>
             </HStack>
@@ -863,33 +710,25 @@ const AdminDashboard: React.FC = () => {
                 >
                   <HStack justify="space-between" mb={2}>
                     <HStack spacing={2}>
-                      <Icon as={FiAlertTriangle} color={getSeverityColor(alert.severity)} />
+                      <Icon as={FiAlertTriangle} color="red.500" />
                       <Text fontWeight="semibold" color="gray.700">
-                        {alert.type}
+                        {alert.plate_number}
                       </Text>
                     </HStack>
                     <Badge colorScheme={getStatusColor(alert.status)} variant="subtle">
-                      {alert.status}
+                      {alert.status.replace('_', ' ')}
                     </Badge>
                   </HStack>
-                  <VStack align="start" spacing={1}>
-                    <HStack spacing={4} fontSize="sm" color="gray.600">
-                      <HStack spacing={1}>
-                        <Icon as={FiTruck} />
-                        <Text>{alert.vehicle}</Text>
-                      </HStack>
-                      <HStack spacing={1}>
-                        <Icon as={FiMapPin} />
-                        <Text>{alert.location}</Text>
-                      </HStack>
-                      <HStack spacing={1}>
-                        <Icon as={FiClock} />
-                        <Text>{alert.time}</Text>
-                      </HStack>
+                  <HStack spacing={4} fontSize="sm" color="gray.600">
+                    <Text>{alert.mismatch_type === 'none' ? 'No mismatch' : `Mismatch: ${alert.mismatch_type}`}</Text>
+                    <HStack spacing={1}>
+                      <Icon as={FiClock} />
+                      <Text>{new Date(alert.timestamp).toLocaleString()}</Text>
                     </HStack>
-                  </VStack>
+                  </HStack>
                 </Box>
               ))}
+              {recentAlerts.length === 0 && <Text color="gray.500">No alerts yet.</Text>}
             </VStack>
           </Box>
         </Box>
@@ -905,48 +744,36 @@ const AdminDashboard: React.FC = () => {
         >
           <Box p={6} borderBottom="1px solid" borderColor="gray.200">
             <HStack justify="space-between">
-              <Heading size="md" color="gray.700">Recent Activity</Heading>
-              <Button size="sm" variant="ghost" color="brand.500">
-                View All
-              </Button>
+              <Heading size="md" color="gray.700">Recent Access</Heading>
             </HStack>
           </Box>
           <Box p={6}>
             <VStack spacing={4} align="stretch">
-              {recentActivity.map((activity) => (
+              {logs.slice(0, 4).map((log) => (
                 <Box
-                  key={activity.id}
+                  key={log.id}
                   p={4}
                   borderRadius="lg"
                   bg="gray.50"
                   border="1px solid"
                   borderColor="gray.200"
-                  _hover={{
-                    bg: 'gray.100',
-                    transform: 'translateY(-1px)',
-                    transition: 'all 0.2s ease',
-                  }}
                 >
                   <HStack justify="space-between">
                     <VStack align="start" spacing={1}>
                       <Text fontWeight="semibold" color="gray.700">
-                        {activity.user}
+                        {log.plate_number}
                       </Text>
                       <Text fontSize="sm" color="gray.600">
-                        {activity.action}
+                        {log.action}
                       </Text>
                     </VStack>
-                    <VStack align="end" spacing={1}>
-                      <Badge colorScheme={getActivityColor(activity.type)} variant="subtle">
-                        {activity.type}
-                      </Badge>
-                      <Text fontSize="xs" color="gray.500">
-                        {activity.time}
-                      </Text>
-                    </VStack>
+                    <Text fontSize="xs" color="gray.500">
+                      {new Date(log.timestamp).toLocaleString()}
+                    </Text>
                   </HStack>
                 </Box>
               ))}
+              {logs.length === 0 && <Text color="gray.500">No access decisions yet.</Text>}
             </VStack>
           </Box>
         </Box>
@@ -990,20 +817,8 @@ const AdminDashboard: React.FC = () => {
           </Button>
           <Button
             variant="neumorphic"
-            leftIcon={<FiShield />}
-            onClick={onSecurityOpen}
-            _hover={{
-              bg: 'brand.50',
-              color: 'brand.600',
-              boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
-            }}
-          >
-            Security Settings
-          </Button>
-          <Button
-            variant="neumorphic"
             leftIcon={<FiActivity />}
-            onClick={onReportsOpen}
+            onClick={() => navigate('/analytics')}
             _hover={{
               bg: 'brand.50',
               color: 'brand.600',
@@ -1023,22 +838,6 @@ const AdminDashboard: React.FC = () => {
             }}
           >
             Refresh Data
-          </Button>
-          <Button
-            variant="neumorphic"
-            leftIcon={<FiDownload />}
-            onClick={() => toast({ 
-              title: 'Export Started', 
-              description: 'System data export has been initiated',
-              status: 'success' 
-            })}
-            _hover={{
-              bg: 'brand.50',
-              color: 'brand.600',
-              boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
-            }}
-          >
-            Export Data
           </Button>
         </HStack>
       </Box>
@@ -1441,236 +1240,7 @@ const AdminDashboard: React.FC = () => {
         </ModalContent>
       </Modal>
 
-      {/* Security Settings Modal */}
-      <Modal isOpen={isSecurityOpen} onClose={onSecurityClose} size="lg">
-        <ModalOverlay />
-        <ModalContent
-          borderRadius="xl"
-          boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
-          border="1px solid"
-          borderColor="gray.200"
-        >
-          <ModalHeader color="gray.700">Security Settings</ModalHeader>
-          <ModalBody>
-            <VStack spacing={6}>
-              <FormControl>
-                <FormLabel color="gray.700">Camera Sensitivity</FormLabel>
-                <HStack spacing={4}>
-                  <Slider
-                    value={securitySettings.cameraSensitivity}
-                    onChange={(value) => handleSecuritySettingChange('cameraSensitivity', value)}
-                    min={0}
-                    max={100}
-                    step={5}
-                    colorScheme="brand"
-                  >
-                    <SliderTrack>
-                      <SliderFilledTrack />
-                    </SliderTrack>
-                    <SliderThumb />
-                  </Slider>
-                  <Text fontWeight="bold" minW="3rem">{securitySettings.cameraSensitivity}%</Text>
-                </HStack>
-                <FormHelperText>Adjust camera detection sensitivity</FormHelperText>
-              </FormControl>
 
-              <FormControl>
-                <FormLabel color="gray.700">Alert Threshold</FormLabel>
-                <Select
-                  value={securitySettings.alertThreshold}
-                  onChange={(e) => handleSecuritySettingChange('alertThreshold', parseInt(e.target.value))}
-                  borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
-                  border="1px solid"
-                  borderColor="gray.200"
-                  _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
-                    borderColor: 'brand.400',
-                  }}
-                >
-                  <option value={1}>Low (1 alert)</option>
-                  <option value={3}>Medium (3 alerts)</option>
-                  <option value={5}>High (5 alerts)</option>
-                  <option value={10}>Critical (10 alerts)</option>
-                </Select>
-                <FormHelperText>Number of alerts before escalation</FormHelperText>
-              </FormControl>
-
-              <FormControl>
-                <FormLabel color="gray.700">Auto Lock System</FormLabel>
-                <Switch
-                  isChecked={securitySettings.autoLock}
-                  onChange={(e) => handleSecuritySettingChange('autoLock', e.target.checked)}
-                  colorScheme="brand"
-                />
-                <FormHelperText>Automatically lock gates after unauthorized access</FormHelperText>
-              </FormControl>
-
-              <FormControl>
-                <FormLabel color="gray.700">Emergency Mode</FormLabel>
-                <Switch
-                  isChecked={securitySettings.emergencyMode}
-                  onChange={(e) => handleSecuritySettingChange('emergencyMode', e.target.checked)}
-                  colorScheme="red"
-                />
-                <FormHelperText>Enable emergency lockdown procedures</FormHelperText>
-              </FormControl>
-
-              <FormControl>
-                <FormLabel color="gray.700">Backup Frequency</FormLabel>
-                <Select
-                  value={securitySettings.backupFrequency}
-                  onChange={(e) => handleSecuritySettingChange('backupFrequency', e.target.value)}
-                  borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
-                  border="1px solid"
-                  borderColor="gray.200"
-                  _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
-                    borderColor: 'brand.400',
-                  }}
-                >
-                  <option value="hourly">Hourly</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </Select>
-                <FormHelperText>How often to backup system data</FormHelperText>
-              </FormControl>
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <HStack spacing={4}>
-              <Button variant="ghost" onClick={onSecurityClose}>
-                Cancel
-              </Button>
-              <Button
-                variant="neumorphic"
-                colorScheme="brand"
-                onClick={handleSecuritySave}
-                _hover={{
-                  bg: 'brand.50',
-                  color: 'brand.600',
-                  boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
-                }}
-              >
-                Save Settings
-              </Button>
-            </HStack>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-
-      {/* System Reports Modal */}
-      <Modal isOpen={isReportsOpen} onClose={onReportsClose} size="xl">
-        <ModalOverlay />
-        <ModalContent
-          borderRadius="xl"
-          boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
-          border="1px solid"
-          borderColor="gray.200"
-        >
-          <ModalHeader color="gray.700">System Reports</ModalHeader>
-          <ModalBody>
-            <VStack spacing={6}>
-              <FormControl>
-                <FormLabel color="gray.700">Report Type</FormLabel>
-                <Select
-                  value={selectedReport}
-                  onChange={(e) => setSelectedReport(e.target.value)}
-                  borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
-                  border="1px solid"
-                  borderColor="gray.200"
-                  _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
-                    borderColor: 'brand.400',
-                  }}
-                >
-                  <option value="daily">Daily Report</option>
-                  <option value="weekly">Weekly Report</option>
-                  <option value="monthly">Monthly Report</option>
-                </Select>
-              </FormControl>
-
-              {reportData && (
-                <Box
-                  bg="gray.50"
-                  p={6}
-                  borderRadius="xl"
-                  border="1px solid"
-                  borderColor="gray.200"
-                  w="full"
-                >
-                  <Heading size="md" mb={4} color="gray.700">
-                    {selectedReport.charAt(0).toUpperCase() + selectedReport.slice(1)} Report Summary
-                  </Heading>
-                  <SimpleGrid columns={2} spacing={4}>
-                    <Stat>
-                      <StatLabel>Total Access</StatLabel>
-                      <StatNumber color="brand.500">{reportData.totalAccess}</StatNumber>
-                    </Stat>
-                    <Stat>
-                      <StatLabel>Authorized Access</StatLabel>
-                      <StatNumber color="green.500">{reportData.authorizedAccess}</StatNumber>
-                    </Stat>
-                    <Stat>
-                      <StatLabel>Unauthorized Access</StatLabel>
-                      <StatNumber color="red.500">{reportData.unauthorizedAccess}</StatNumber>
-                    </Stat>
-                    <Stat>
-                      <StatLabel>Alerts</StatLabel>
-                      <StatNumber color="orange.500">{reportData.alerts}</StatNumber>
-                    </Stat>
-                    <Stat gridColumn="span 2">
-                      <StatLabel>System Uptime</StatLabel>
-                      <StatNumber color="blue.500">{reportData.systemUptime}%</StatNumber>
-                    </Stat>
-                  </SimpleGrid>
-                </Box>
-              )}
-
-              <HStack spacing={4} w="full">
-                <Button
-                  variant="neumorphic"
-                  colorScheme="brand"
-                  onClick={generateReport}
-                  isLoading={generatingReport}
-                  loadingText="Generating..."
-                  flex={1}
-                  _hover={{
-                    bg: 'brand.50',
-                    color: 'brand.600',
-                    boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
-                  }}
-                >
-                  Generate Report
-                </Button>
-                {reportData && (
-                  <Button
-                    variant="neumorphic"
-                    leftIcon={<FiDownload />}
-                    onClick={exportReport}
-                    flex={1}
-                    _hover={{
-                      bg: 'brand.50',
-                      color: 'brand.600',
-                      boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
-                    }}
-                  >
-                    Export Report
-                  </Button>
-                )}
-              </HStack>
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="ghost" onClick={onReportsClose}>
-              Close
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
     </Box>
   );
 };

@@ -11,7 +11,7 @@ import api from '../api';
 
 describe('UserPortal', () => {
   it('renders a vehicle registered without a colour', async () => {
-    vi.spyOn(api, 'get').mockImplementation(async (url: string) =>
+    const get = vi.spyOn(api, 'get').mockImplementation(async (url: string) =>
       url === '/vehicles'
         ? ({ data: { vehicles: [{ id: 'v1', plate_number: 'AB12CD', make: 'Ford', model: 'Focus', color: null, owner_id: 'u1' }] } } as never)
         : ({ data: { logs: [], total: 0 } } as never)
@@ -25,5 +25,7 @@ describe('UserPortal', () => {
 
     expect(await screen.findByText('AB12CD')).toBeInTheDocument();
     expect(screen.getByText(/colour not recorded/i)).toBeInTheDocument();
+    // useAuth returns a new user object per render; that must not refetch.
+    expect(get.mock.calls.filter(([url]) => url === '/vehicles')).toHaveLength(1);
   });
 });
