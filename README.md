@@ -84,9 +84,9 @@ cd ../../frontend && npm install && npm run dev    # http://localhost:5173
 ## Tests
 
 ```bash
-cd backend/api_server     && .venv/bin/python -m pytest  # 174 (+18 with Redis)
+cd backend/api_server     && .venv/bin/python -m pytest  # 238 (+21 with PostgreSQL and Redis)
 cd backend/vision_service && .venv/bin/python -m pytest  # 49
-cd frontend               && npm test                    # 58
+cd frontend               && npm test                    # 82
 ```
 
 CI runs all of them plus lint, typecheck, build, a dependency audit, and a
