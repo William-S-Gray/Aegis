@@ -165,9 +165,24 @@ alert is a red row in a web UI nobody is watching. Alertmanager
 | `critical` | 10s | 1h | Gates are not working; page someone now |
 | `warning` | 30s | 12h | Working hours, not 03:00 |
 
-`monitoring/alertmanager.yml` ships with **webhook placeholders**. Replace one
-receiver with your real integration (PagerDuty, Slack, email) before relying on
-any of this.
+Alerts of every severity go to one Discord channel. Nothing is delivered until
+the webhook URL is set:
+
+1. In Discord: channel settings → Integrations → Webhooks → New Webhook → Copy
+   Webhook URL.
+2. Save it where Alertmanager reads it (the file is gitignored; the URL is a
+   secret, since anyone holding it can post to the channel):
+
+   ```bash
+   printf '%s' 'https://discord.com/api/webhooks/...' > monitoring/discord-webhook-url
+   ```
+
+3. Restart Alertmanager (`docker compose -f docker-compose.yml -f
+   docker-compose.monitoring.yml restart alertmanager`) and send the test alert
+   below.
+
+Create the file before starting the stack: otherwise Docker creates a directory
+in its place and Alertmanager cannot send anything.
 
 Two inhibition rules prevent double-paging: if `AegisApiDown` fires, its error
 rate and latency alerts are suppressed as consequences rather than separate

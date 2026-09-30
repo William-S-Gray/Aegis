@@ -3,13 +3,13 @@
 # Prometheus evaluating rules is only half the job: without this, a firing
 # alert is a red row in a web UI nobody is looking at.
 #
-# Receivers below are placeholders. Fill in ONE before relying on this, and
-# send a test alert (see docs/operations.md) — an untested paging path is
-# discovered at the worst possible moment.
+# Alerts go to a Discord channel. The webhook URL is a secret, so it lives in
+# monitoring/discord-webhook-url (gitignored, mounted read-only), not here:
 #
-# Edit the URLs here: Alertmanager does not expand environment variables in
-# this file, so a ${VAR} placeholder is read literally and the config fails
-# to load.
+#   printf '%s' 'https://discord.com/api/webhooks/...' > monitoring/discord-webhook-url
+#
+# Then send a test alert (see docs/operations.md): an untested paging path is
+# discovered at the worst possible moment.
 
 global:
   resolve_timeout: 5m
@@ -22,19 +22,19 @@ route:
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
-  receiver: default
+  receiver: discord
 
   routes:
     - matchers:
         - severity = "critical"
-      receiver: critical
+      receiver: discord
       # Page fast, and keep reminding: these mean gates are not working.
       group_wait: 10s
       repeat_interval: 1h
 
     - matchers:
         - severity = "warning"
-      receiver: warnings
+      receiver: discord
       # Warnings are for working hours, not 03:00.
       repeat_interval: 12h
 
@@ -54,24 +54,9 @@ inhibit_rules:
     equal: ["alertname"]
 
 receivers:
-  - name: default
-
-  - name: critical
-    # Replace with your on-call integration. Examples:
-    #
-    # pagerduty_configs:
-    #   - routing_key: <integration-key>
-    #
-    # slack_configs:
-    #   - api_url: <webhook-url>
-    #     channel: "#aegis-alerts"
-    #     title: '{{ .CommonAnnotations.summary }}'
-    #     text: '{{ .CommonAnnotations.description }}'
-    webhook_configs:
-      - url: http://alert-sink:9099/critical
-        send_resolved: true
-
-  - name: warnings
-    webhook_configs:
-      - url: http://alert-sink:9099/warning
+  # One channel for every severity; the routes above set how fast and how
+  # often each is sent, and the message lists the severity label.
+  - name: discord
+    discord_configs:
+      - webhook_url_file: /etc/alertmanager/discord-webhook-url
         send_resolved: true

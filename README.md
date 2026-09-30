@@ -119,9 +119,9 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
 Prometheus, Alertmanager, and Grafana with a provisioned dashboard and nine
-alert rules, all bound to loopback. Alertmanager ships with **webhook
-placeholders** — wire a real integration and send a test alert before relying
-on it. See [docs/operations.md](docs/operations.md).
+alert rules, all bound to loopback. Alertmanager sends alerts to Discord
+once you save a webhook URL to `monitoring/discord-webhook-url`; send a test
+alert before relying on it. See [docs/operations.md](docs/operations.md).
 
 ## Operations
 
