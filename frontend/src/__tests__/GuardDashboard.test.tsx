@@ -49,7 +49,8 @@ beforeEach(() => {
   window.HTMLMediaElement.prototype.play = () => Promise.resolve();
 });
 
-async function renderConnected() {
+async function renderConnected(existing: ReturnType<typeof alertFor>['alert'][] = []) {
+  vi.spyOn(api, 'get').mockResolvedValue({ data: { alerts: existing } } as never);
   vi.spyOn(api, 'post').mockImplementation(async (url: string) =>
     url === '/auth/ws-ticket' ? ({ data: { ticket: 't' } } as never) : ({ data: {} } as never)
   );
@@ -107,5 +108,21 @@ describe('GuardDashboard decisions', () => {
     for (const label of [/Emergency Protocol/i, /Generate Report/i, /Guard Settings/i, /Refresh Systems/i]) {
       expect(screen.queryByText(label)).toBeNull();
     }
+  });
+});
+
+describe('GuardDashboard recent alerts', () => {
+  it('shows alerts from before the page loaded, without asking for a decision', async () => {
+    // A guard signing in or refreshing used to see "No alerts yet" over a
+    // board full of open alerts.
+    const socket = await renderConnected([alertFor('old-1', 'EARLIER1').alert]);
+
+    expect(await screen.findByText('EARLIER1')).toBeInTheDocument();
+    expect(screen.queryByText(/New Alert - EARLIER1/)).toBeNull();
+
+    // The same alert arriving live is not listed twice.
+    act(() => socket.push(alertFor('old-1', 'EARLIER1')));
+    await screen.findByText(/New Alert - EARLIER1/);
+    expect(screen.getAllByText('EARLIER1')).toHaveLength(1);
   });
 });
