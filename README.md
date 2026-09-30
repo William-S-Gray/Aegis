@@ -11,13 +11,15 @@ streaming, and a licence-plate recognition pipeline with human review.
 | Realtime alert streaming | Working — authenticated WebSockets |
 | Frontend (React + TypeScript) | Working — admin, guard, user, analytics, plate review |
 | Vision pipeline | Working — capture, gating, de-duplication, publishing |
-| Plate **detection model** | **Not production-ready** — see below |
+| Plate **detection and reading** | Working, measured on public data — **measure on your cameras** before relying on it |
 
-The vision *pipeline* is complete and tested. The *model* is not: the default
-detector is a deterministic stub that fabricates plates so the pipeline can be
-exercised without a 3 GB ML stack. Real detection needs plate-specific YOLO
-weights and, realistically, fine-tuning on footage from the actual cameras.
-The service refuses to start with the stub outside development.
+Plates are found and read by two small ONNX models on a CPU (MIT-licensed,
+~11 MB, baked into the image). On public test data they found 96% of plates,
+and the confidence gate held back nearly every misread for a human; details in
+the [vision README](backend/vision_service/README.md#real-detection). That data
+is not your cameras: measure on your own footage with `python -m app.evaluate`
+before quoting any accuracy. A deterministic stub remains for development and
+is refused outside it.
 
 ## Architecture
 
@@ -83,7 +85,7 @@ cd ../../frontend && npm install && npm run dev    # http://localhost:5173
 
 ```bash
 cd backend/api_server     && .venv/bin/python -m pytest  # 174 (+18 with Redis)
-cd backend/vision_service && .venv/bin/python -m pytest  # 26
+cd backend/vision_service && .venv/bin/python -m pytest  # 49
 cd frontend               && npm test                    # 58
 ```
 

@@ -9,17 +9,22 @@ frame → detect → read → gate → publish
 ## Status, honestly
 
 The **pipeline is complete and tested**: capture, detection, OCR, confidence
-gating, de-duplication, service-account auth, and publishing. What is *not*
-done is the part that takes months — a detector accurate enough on your
-cameras, in your lighting, with your plate formats.
+gating, de-duplication, service-account auth, and publishing. The real
+detector and reader have been **measured on public data, not on your
+cameras**. Plate appearance varies by country, mounting and lighting, so
+measure on your own footage (see [Measuring accuracy](#measuring-accuracy))
+before trusting any number here.
 
 The detector and reader sit behind protocols (`app/types.py`) with two
 implementations each:
 
-| | Stub | Real |
+| | Stub | Real (`onnx`) |
 |---|---|---|
-| Detector | `detectors/stub.py` | `detectors/yolo.py` (Ultralytics) |
-| Reader | `detectors/stub.py` | `ocr/tesseract.py` |
+| Detector | `detectors/stub.py` | `detectors/plate_onnx.py`: open-image-models YOLOv9 plate model (MIT) |
+| Reader | `detectors/stub.py` | `ocr/fast_plate.py`: fast-plate-ocr, trained on plates from many countries (MIT) |
+
+Both real models run on ONNX Runtime on a CPU, with no torch or GPU needed.
+Together they are ~11 MB of weights, and the Docker image bakes them in.
 
 The stub is deterministic, needs no ML stack, and exists so the pipeline and
 its integration with the API can be tested. **It fabricates plates.**
@@ -45,25 +50,37 @@ cp .env.example .env      # set VISION_SERVICE_PASSWORD
 ## Real detection
 
 ```bash
-sudo apt install tesseract-ocr
-.venv/bin/pip install -r requirements-ml.txt      # ~3 GB
+.venv/bin/pip install -r requirements-ml.txt      # ~100 MB, CPU
 ```
 
 ```env
-VISION_DETECTOR=yolo
-VISION_READER=tesseract
-VISION_MODEL_PATH=/path/to/plate-weights.pt
-VISION_DEVICE=cuda:0
+VISION_DETECTOR=onnx
+VISION_READER=onnx
+# Optional; these are the defaults.
+VISION_DETECTOR_MODEL=yolo-v9-t-640-license-plate-end2end
+VISION_READER_MODEL=cct-xs-v2-global-model
+VISION_DEVICE=            # cpu or cuda; empty lets ONNX Runtime choose
 ```
 
-**Stock YOLO weights detect cars, not plates.** You need plate-specific
-weights. Public plate datasets get you a demo; production accuracy will almost
-certainly require fine-tuning on footage from the actual cameras.
+The models download to `~/.cache` on first use. The Docker image includes
+them, and `docker compose --profile vision` uses them by default.
+
+### Measured (September 2026, laptop CPU)
+
+| | Result |
+|---|---|
+| Detection, 882 held-out images with human-drawn boxes | 96.2% of plates found, 97.4% precision, ~110 ms/frame |
+| Reading, 20 human-labelled plates (AR, FR, MX, PT) | 18 exact; both misses fell below auto-accept |
+| Reading, 60 hand-checked hard cases (blurred, two-line, small) | 72% exact; wrong reads scored ≤ 0.52 except 2 |
+| OCR time | ~3 ms per plate |
+
+Larger models (`yolo-v9-s-608-…`, `cct-s-v2-global-model`) were measured too.
+They were 2–10× slower for at most +0.6% recall and no reading gain.
 
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest      # 26 tests, no ML stack required
+.venv/bin/python -m pytest      # no ML stack required
 ```
 
 ## How gating works
@@ -71,14 +88,20 @@ certainly require fine-tuning on footage from the actual cameras.
 Two thresholds, both server-side in the API (`plate_auto_accept_confidence`,
 `plate_review_floor_confidence`):
 
-| Combined confidence | Outcome |
+| Plate confidence | Outcome |
 |---|---|
 | ≥ 0.85 | Acted on automatically |
 | 0.50 – 0.85 | Recorded, flagged `requires_review` → human confirms |
 | < 0.50 | Refused; counted as a discard, never stored |
 
-Combined confidence is `detection × reading` — a crisp box around unreadable
-characters is not a good read.
+Plate confidence is the reader's confidence in its **weakest character**. One
+wrong character makes the whole plate wrong, and an average would hide it.
+Detection confidence is not multiplied in, because it scores the box rather
+than the characters: on real plates it sat at 0.73–0.93 for right and wrong
+reads alike. Multiplying by it capped most correct reads below 0.85, which
+sent them to review for nothing. It acts as a floor instead
+(`VISION_DETECTOR_CONFIDENCE`, default 0.4), so a box that is not a plate is
+never read.
 
 Low vehicle-type confidence also routes to review, so an attribute mismatch is
 never raised on a shaky type classification.
@@ -121,7 +144,7 @@ memory, and audits a guard's viewing once per camera every five minutes.
 Previews run at the capture rate: raise it with `VISION_FRAME_INTERVAL_SECONDS`,
 which also raises detection load. The camera's name shown to guards is its
 host and path; credentials in a stream URL are never sent. Reading RTSP/MJPEG
-needs OpenCV (`requirements-ml.txt`, or `INCLUDE_ML=true` for the image).
+needs OpenCV (`requirements-ml.txt`; the Docker image includes it).
 
 ## Before production
 
@@ -134,5 +157,28 @@ needs OpenCV (`requirements-ml.txt`, or `INCLUDE_ML=true` for the image).
   the account most likely to be compromised.
 - Run one process per camera, or add a worker pool — the loop is currently
   sequential across sources.
-- Build a labelled evaluation set and measure before/after on every model
-  change. `ImageDirectorySource` exists for exactly this.
+- Build a labelled evaluation set from your own cameras and measure
+  before/after every model change (below).
+
+## Measuring accuracy
+
+Save a few hundred stills from your own cameras, in all lighting, and a CSV of
+what a person reads on each:
+
+```csv
+file,plate
+gate/0001.jpg,AB12 CDE
+gate/0002.jpg,KX71 YTR
+```
+
+```bash
+VISION_DETECTOR=onnx VISION_READER=onnx .venv/bin/python -m app.evaluate labels.csv
+# or, in the image:
+docker compose run --rm -v "$PWD/eval:/eval:ro" vision python -m app.evaluate /eval/labels.csv
+```
+
+It prints each plate's outcome, then the split that matters for running the
+gate: auto-accepted (and how many of those were wrong), sent to review,
+discarded, or not found. Keep "auto-accepted but wrong" near zero; if it is
+not, raise the API's `plate_auto_accept_confidence` rather than trusting a
+model you have not measured.

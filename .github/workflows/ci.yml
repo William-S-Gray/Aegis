@@ -173,6 +173,7 @@ jobs:
           config="$(docker compose --profile vision config)"
           echo "$config" | grep -q 'ENVIRONMENT: production'
           echo "$config" | grep -q 'VISION_ENVIRONMENT: production'
+          echo "$config" | grep -q 'VISION_DETECTOR: onnx'
 
       - name: Grafana dashboard is valid JSON
         run: python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('monitoring/grafana/dashboards/*.json')]; print('dashboards OK')"
@@ -195,8 +196,8 @@ jobs:
             backend/vision_service/requirements.txt
             backend/vision_service/requirements-dev.txt
 
-      # Deliberately without the ML extras: the pipeline must stay testable
-      # without a 3 GB download.
+      # Without the ML extras: the pipeline runs on the stub and the model
+      # adapters on fakes. Model accuracy is measured with app.evaluate.
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
 

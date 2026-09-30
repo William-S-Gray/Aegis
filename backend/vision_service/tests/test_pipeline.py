@@ -72,14 +72,14 @@ class TestNormalizePlate:
 
 
 class TestObserve:
-    def test_combines_detection_and_reading_confidence(self):
+    def test_confidence_is_the_readings(self):
         pipeline = Pipeline(FixedDetector(detection(0.9)), FixedReader("AB12CD", 0.8))
 
         observation = pipeline.observe(frame())[0]
 
-        # A crisp box around unreadable characters is not a good read, so the
-        # two confidences multiply rather than either standing alone.
-        assert observation.plate_confidence == pytest.approx(0.72)
+        # Detection confidence scores the box, not the characters; multiplying
+        # by it pushed correct reads under the auto-accept line.
+        assert observation.plate_confidence == pytest.approx(0.8)
 
     def test_unreadable_crop_is_counted_not_published(self):
         pipeline = Pipeline(FixedDetector(detection()), FixedReader(None))
@@ -116,8 +116,8 @@ class TestGating:
     def test_low_confidence_is_not_published(self):
         client = FakeClient()
         pipeline = Pipeline(
-            FixedDetector(detection(0.4)),
-            FixedReader("AB12CD", 1.0),
+            FixedDetector(detection(0.95)),
+            FixedReader("AB12CD", 0.4),
             client,
             min_publish_confidence=0.5,
         )
@@ -159,7 +159,7 @@ class TestGating:
                     vehicle_color="white",
                 )
             ),
-            FixedReader("AB12CD", 1.0),
+            FixedReader("AB12CD", 0.9),
             client,
             site_id="site-1",
         )
@@ -170,7 +170,7 @@ class TestGating:
             "plate_number": "AB12CD",
             "detected_type": "sedan",
             "detected_color": "white",
-            "plate_confidence": pytest.approx(0.95),
+            "plate_confidence": pytest.approx(0.9),
             "type_confidence": 0.8,
             "site_id": "site-1",
             "detector_name": "fixed",
