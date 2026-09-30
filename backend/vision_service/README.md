@@ -111,7 +111,7 @@ never raised on a shaky type classification.
 Do not sell an accuracy number. Sell these, from `PipelineStats`:
 
 ```
-frames  detections  unreadable  below_floor  deduped  published  rejected_by_api
+frames  detections  unreadable  below_floor  unconfirmed  deduped  published  rejected_by_api
 ```
 
 "We auto-accept X%, route Y% to a human, and discard Z% as unreadable" is a
@@ -126,6 +126,19 @@ When a human corrects a plate, `POST /alerts/{id}/confirm-plate`
 case where an "unregistered" verdict was wrong. Both the machine reading and
 the human's are written to the audit log — that record is your training set for
 the next model.
+
+## Confirmation across frames
+
+One blurred frame can misread a plate with high confidence. In a webcam test,
+a plate read correctly in 142 frames was read once as a different plate at
+0.92, which the gate alone would have auto-accepted. The true reading
+dominates across frames, and a misread doesn't repeat. So a live camera's read
+is published only once the same plate appears in `VISION_CONFIRM_FRAMES` (3)
+of that camera's last `VISION_CONFIRM_WINDOW_FRAMES` (5) frames. At the
+default `VISION_FRAME_INTERVAL_SECONDS` of 0.5, a vehicle must be in view for
+about 1.5 s. Reads that never confirm are counted as `unconfirmed`. Still
+images (a directory source, `app.evaluate`) are not confirmed, because each is
+its own picture.
 
 ## De-duplication
 
@@ -149,7 +162,8 @@ needs OpenCV (`requirements-ml.txt`; the Docker image includes it).
 ## Before production
 
 - Replace the stub; the service refuses to run with it outside development.
-- Point `VISION_SOURCES` at RTSP/MJPEG cameras rather than a directory.
+- Point `VISION_SOURCES` at RTSP/MJPEG cameras (or a USB camera such as
+  `/dev/video0`) rather than a directory.
 - Give the service account the **`service` role**, never `guard`. A service
   account may publish detections and nothing else — it cannot read the vehicle
   register, list alerts, confirm plates, or record an access decision. Camera

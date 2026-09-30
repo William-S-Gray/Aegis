@@ -37,7 +37,7 @@ class ImageDirectorySource:
                 image = _load_image(path)
                 if image is None:
                     continue
-                yield Frame(image=image, source=str(path), site_id=self._site_id)
+                yield Frame(image=image, source=str(path), site_id=self._site_id, still=True)
 
             if not self._loop:
                 return
@@ -45,7 +45,8 @@ class ImageDirectorySource:
 
 class VideoSource:
     """
-    Reads frames from a video file, RTSP stream, or MJPEG endpoint.
+    Reads frames from a video file, RTSP stream, MJPEG endpoint, or a local
+    camera device such as /dev/video0.
 
     Requires OpenCV. `frame_interval_seconds` throttles processing: analysing
     every frame of a 30 fps stream is wasted work when a vehicle is present for
@@ -85,14 +86,23 @@ class VideoSource:
         while not self._stop.is_set():
             # Bounded open and read: without these a stalled camera blocks
             # capture.read() forever, and the process never sees SIGTERM.
-            capture = cv2.VideoCapture(
-                self._uri,
-                cv2.CAP_FFMPEG,
-                [
-                    cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, self._timeout_ms,
-                    cv2.CAP_PROP_READ_TIMEOUT_MSEC, self._timeout_ms,
-                ],
-            )
+            if self._uri.startswith("/dev/video"):
+                capture = cv2.VideoCapture(self._uri, cv2.CAP_V4L2)
+                # USB cameras default to 640x480 raw; most only offer HD as MJPEG,
+                # and plates need the pixels. Best effort: the camera picks the
+                # nearest mode it supports.
+                capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+                capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            else:
+                capture = cv2.VideoCapture(
+                    self._uri,
+                    cv2.CAP_FFMPEG,
+                    [
+                        cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, self._timeout_ms,
+                        cv2.CAP_PROP_READ_TIMEOUT_MSEC, self._timeout_ms,
+                    ],
+                )
             if not capture.isOpened():
                 if not self._live:
                     logger.error("Could not open %s", self._uri)
@@ -125,8 +135,8 @@ class VideoSource:
 
 
 def is_live(uri: str) -> bool:
-    """True for network streams, which are reopened when they drop."""
-    return uri.startswith(("rtsp://", "http://", "https://"))
+    """True for cameras, which are reopened when they drop; a file just ends."""
+    return uri.startswith(("rtsp://", "http://", "https://", "/dev/video"))
 
 
 def _load_image(path: Path):

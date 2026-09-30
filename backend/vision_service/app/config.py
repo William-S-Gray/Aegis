@@ -45,13 +45,19 @@ class VisionSettings(BaseSettings):
 
     # ---- Capture --------------------------------------------------------
     sources: str = ""
-    frame_interval_seconds: float = 1.0
+    frame_interval_seconds: float = 0.5
     # How often each camera's live preview is pushed to the guard console;
     # 0 turns previews off.
     preview_interval_seconds: float = 1.0
 
     # A plate seen repeatedly in consecutive frames is one event, not many.
     dedupe_window_seconds: float = 30.0
+
+    # A live read is published once the same plate is read in this many of the
+    # camera's last `confirm_window_frames` frames; 1 turns this off. At the
+    # default frame interval that is about 1.5 s of the vehicle in view.
+    confirm_frames: int = 3
+    confirm_window_frames: int = 5
 
     # Reads below this are dropped locally without troubling the API. The API
     # enforces its own floor as well; this one just saves a round trip.

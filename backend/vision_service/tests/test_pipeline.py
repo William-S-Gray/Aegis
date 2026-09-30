@@ -47,8 +47,23 @@ class FixedReader:
         return PlateReading(text=self._text, confidence=self._confidence)
 
 
-def frame(source: str = "cam-1") -> Frame:
-    return Frame(image=b"fake-bytes", source=source)
+def frame(source: str = "cam-1", still: bool = True) -> Frame:
+    # Still by default: most tests are about one read, not a stream of them.
+    return Frame(image=b"fake-bytes", source=source, still=still)
+
+
+class SequenceReader:
+    """Reads the given plates in turn, one per frame (None: nothing read)."""
+
+    name = "sequence"
+    version = "1.0"
+
+    def __init__(self, plates: list[str | None]):
+        self._plates = iter(plates)
+
+    def read(self, image):
+        text = next(self._plates)
+        return PlateReading(text=text, confidence=0.95) if text else None
 
 
 def detection(confidence: float = 0.9, **kwargs) -> PlateDetection:
@@ -230,6 +245,45 @@ class TestDeduplication:
         assert [c["plate_number"] for c in client.calls] == ["AB12CD", "XY99ZZ"]
 
 
+class TestConfirmation:
+    def stream(self, plates, **kwargs):
+        client = FakeClient()
+        pipeline = Pipeline(FixedDetector(detection(0.95)), SequenceReader(plates), client, **kwargs)
+        for _ in plates:
+            pipeline.process(frame("rtsp://gate", still=False))
+        return client, pipeline
+
+    def test_a_single_blurred_misread_is_never_published(self):
+        """Webcam test: a plate read right 142 times was misread once at 0.92."""
+        client, pipeline = self.stream(["ABH2411", "ABH241", "ABH2411", "ABH2411", "ABH2411"])
+
+        assert [c["plate_number"] for c in client.calls] == ["ABH2411"]
+        assert pipeline.stats.unconfirmed == 3  # two early ABH2411s, one ABH241
+
+    def test_confirmation_tolerates_a_missed_frame(self):
+        client, _ = self.stream(["AB12CD", None, "AB12CD", "AB12CD"])
+
+        assert [c["plate_number"] for c in client.calls] == ["AB12CD"]
+
+    def test_reads_too_far_apart_do_not_confirm(self):
+        client, _ = self.stream(["AB12CD", None, None, None, None, "AB12CD", "AB12CD"])
+
+        assert client.calls == []
+
+    def test_cameras_are_confirmed_separately(self):
+        client = FakeClient()
+        pipeline = Pipeline(FixedDetector(detection(0.95)), FixedReader("AB12CD", 0.95), client)
+        for source in ["cam-a", "cam-b", "cam-a", "cam-b"]:
+            pipeline.process(frame(source, still=False))
+
+        assert client.calls == []
+
+    def test_can_be_turned_off(self):
+        client, _ = self.stream(["AB12CD"], confirm_frames=1)
+
+        assert len(client.calls) == 1
+
+
 class TestStubDetector:
     def test_output_is_deterministic_per_source(self):
         detector = StubPlateDetector()
@@ -283,6 +337,7 @@ class TestSourceKind:
         [
             ("rtsp://cam/stream", True),
             ("http://cam/video", True),
+            ("/dev/video0", True),
             ("/data/replay.mp4", False),
             ("clip.mkv", False),
         ],
