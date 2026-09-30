@@ -222,10 +222,6 @@ const Home: React.FC = () => {
             textAlign="center"
           >
             <VStack>
-              <Text fontSize="3xl" fontWeight="bold" color="brand.500">99.9%</Text>
-              <Text fontSize="sm" color="gray.600">Uptime</Text>
-            </VStack>
-            <VStack>
               <Text fontSize="3xl" fontWeight="bold" color="brand.500">24/7</Text>
               <Text fontSize="sm" color="gray.600">Monitoring</Text>
             </VStack>
