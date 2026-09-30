@@ -37,8 +37,9 @@ COPY --chown=vision:vision app ./app
 USER vision
 
 # Bake the default models into the vision user's cache. Other models named via
-# VISION_DETECTOR_MODEL / VISION_READER_MODEL download on first use.
-RUN python -c "from app.detectors.plate_onnx import OnnxPlateDetector as D; from app.ocr.fast_plate import FastPlateReader as R; D(); R()"
+# VISION_DETECTOR_MODEL / VISION_READER_MODEL / VISION_VEHICLE_MODEL download
+# on first use.
+RUN python -c "from app.detectors.plate_onnx import OnnxPlateDetector as D; from app.ocr.fast_plate import FastPlateReader as R; from app.detectors.vehicle_onnx import OnnxVehicleClassifier as V; D(); R(); V()"
 
 # Long-running capture process; no port is exposed.
 CMD ["python", "-m", "app.main"]

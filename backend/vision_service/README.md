@@ -127,6 +127,28 @@ case where an "unregistered" verdict was wrong. Both the machine reading and
 the human's are written to the audit log — that record is your training set for
 the next model.
 
+## Vehicle type
+
+A plate on the wrong kind of vehicle is the classic sign of a cloned or moved
+plate. With the `onnx` detector, each published vehicle is classified as
+**car, truck, bus or motorcycle** (`detectors/vehicle_onnx.py`, RF-DETR COCO,
+MIT). This runs once per vehicle, not per frame, because it takes about 0.5 s on a
+CPU. The API compares that coarse class against the registered type's
+family: a registered sedan, hatchback or SUV is a "car", and a van or pickup
+is accepted as either car or truck, because detectors split them both ways. A
+car's plate on a truck raises a type mismatch; a sedan's plate on an SUV does
+not. Finer types are beyond this model.
+
+In testing, 21 of 21 vehicle types were right, and 7 registered vehicles (including
+a van and a pickup) produced no false mismatch. A fire engine registered as a
+sedan was flagged. Low type confidence (< 0.60) sends the read to review
+rather than raising a mismatch. `VISION_VEHICLE_MODEL=` (empty) turns it off.
+
+**Colour is not detected from real cameras.** A simple colour estimate was right
+on only about 7 of 20 vehicles, because shadows, glass and background skew it. It would raise
+false colour mismatches. It needs a classifier trained on your own footage;
+the plates guards confirm in the review queue are the start of that set.
+
 ## Confirmation across frames
 
 One blurred frame can misread a plate with high confidence. In a webcam test,

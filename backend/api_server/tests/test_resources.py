@@ -489,6 +489,43 @@ class TestAlerts:
         alert = db.scalar(select(Alert))
         assert alert.mismatch_type == MismatchType.NONE
 
+    @pytest.mark.parametrize(
+        ("registered", "detected", "expected"),
+        [
+            # A general-purpose detector reports coarse classes; they are
+            # compared against the registered type's family.
+            ("suv", "car", MismatchType.NONE),
+            ("hatchback", "car", MismatchType.NONE),
+            ("sedan", "truck", MismatchType.TYPE),  # a car's plate on a truck
+            ("sedan", "motorcycle", MismatchType.TYPE),
+            ("bus", "car", MismatchType.TYPE),
+            # Detectors split vans and pickups between car and truck.
+            ("van", "car", MismatchType.NONE),
+            ("van", "truck", MismatchType.NONE),
+            ("pickup", "truck", MismatchType.NONE),
+            # A detector reporting fine types is still compared exactly.
+            ("van", "sedan", MismatchType.TYPE),
+        ],
+    )
+    def test_type_is_compared_by_family_for_coarse_detections(
+        self, client, auth, db, registered, detected, expected
+    ):
+        admin = auth(Role.ADMIN)
+        client.post(
+            "/api/v1/vehicles",
+            headers=admin,
+            json={"plate_number": "FAM1", "vehicle_type": registered},
+        )
+
+        guard = auth(Role.GUARD)
+        client.post(
+            "/api/v1/alerts",
+            headers=guard,
+            json={"plate_number": "FAM1", "detected_type": detected},
+        )
+
+        assert db.scalar(select(Alert)).mismatch_type == expected
+
     def test_colour_mismatch_is_detected(self, client, auth, db):
         admin = auth(Role.ADMIN)
         client.post(

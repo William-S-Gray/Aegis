@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from app.detectors.plate_onnx import OnnxPlateDetector, _providers
 from app.ocr.fast_plate import FastPlateReader
-from app.types import Frame
+from app.types import BoundingBox, Frame
 
 
 def reader_with(prediction=None, error=None) -> FastPlateReader:
@@ -90,3 +90,28 @@ class TestOnnxPlateDetector:
         assert _providers(None) is None
         assert _providers("cuda:0")[0] == "CUDAExecutionProvider"
         assert _providers("cpu") == ["CPUExecutionProvider"]
+
+
+class TestOwningVehicle:
+    """Boxes from real photos in the measurement set."""
+
+    def test_a_car_on_a_transporter_is_not_the_cab(self):
+        from app.detectors.vehicle_onnx import owning_vehicle
+
+        plate = BoundingBox(612, 282, 100, 29)  # the loaded car's plate
+        vehicles = [("truck", 0.89, (408, 102, 1172, 901)), ("car", 0.71, (534, 149, 883, 354))]
+
+        assert owning_vehicle(plate, vehicles) == ("car", 0.71)
+
+    def test_the_cab_owns_its_own_bumper_plate(self):
+        from app.detectors.vehicle_onnx import owning_vehicle
+
+        plate = BoundingBox(640, 840, 90, 25)
+        vehicles = [("truck", 0.89, (408, 102, 1172, 901)), ("car", 0.71, (534, 149, 883, 354))]
+
+        assert owning_vehicle(plate, vehicles) == ("truck", 0.89)
+
+    def test_no_vehicle_around_the_plate(self):
+        from app.detectors.vehicle_onnx import owning_vehicle
+
+        assert owning_vehicle(BoundingBox(0, 0, 10, 5), [("car", 0.9, (500, 500, 900, 800))]) is None

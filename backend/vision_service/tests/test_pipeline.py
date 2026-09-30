@@ -284,6 +284,41 @@ class TestConfirmation:
         assert len(client.calls) == 1
 
 
+class TestVehicleType:
+    class Classifier:
+        def __init__(self):
+            self.calls = 0
+
+        def classify(self, image, plate):
+            self.calls += 1
+            return ("truck", 0.88)
+
+    def test_published_read_carries_the_vehicle_type(self):
+        client, classifier = FakeClient(), self.Classifier()
+        pipeline = Pipeline(
+            FixedDetector(detection(0.95)), FixedReader("AB12CD", 0.95), client,
+            vehicle_classifier=classifier,
+        )
+        for _ in range(3):
+            pipeline.process(frame())
+
+        assert client.calls[0]["detected_type"] == "truck"
+        assert client.calls[0]["type_confidence"] == 0.88
+        # Once per published vehicle: it is too slow for every frame.
+        assert classifier.calls == 1
+
+    def test_a_type_from_the_detector_is_kept(self):
+        client, classifier = FakeClient(), self.Classifier()
+        pipeline = Pipeline(
+            FixedDetector(detection(0.95, vehicle_type="sedan", vehicle_type_confidence=0.9)),
+            FixedReader("AB12CD", 0.95), client, vehicle_classifier=classifier,
+        )
+        pipeline.process(frame())
+
+        assert client.calls[0]["detected_type"] == "sedan"
+        assert classifier.calls == 0
+
+
 class TestStubDetector:
     def test_output_is_deterministic_per_source(self):
         detector = StubPlateDetector()

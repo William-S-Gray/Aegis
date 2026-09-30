@@ -57,6 +57,15 @@ def build_detector(settings: VisionSettings) -> tuple[PlateDetector, PlateReader
     return detector, reader
 
 
+def build_vehicle_classifier(settings: VisionSettings):
+    """Coarse vehicle type for real detections; the stub supplies its own."""
+    if settings.detector != "onnx" or not settings.vehicle_model:
+        return None
+    from app.detectors.vehicle_onnx import OnnxVehicleClassifier
+
+    return OnnxVehicleClassifier(model=settings.vehicle_model, device=settings.device)
+
+
 def build_source(uri: str, settings: VisionSettings):
     if uri.startswith(("rtsp://", "http://", "https://", "/dev/video")) or uri.endswith(
         (".mp4", ".avi", ".mkv")
@@ -100,6 +109,7 @@ def run(settings: VisionSettings, once: bool = False) -> int:
             dedupe_window_seconds=settings.dedupe_window_seconds,
             confirm_frames=settings.confirm_frames,
             confirm_window_frames=settings.confirm_window_frames,
+            vehicle_classifier=build_vehicle_classifier(settings),
         )
 
         preview = Preview(client, settings.preview_interval_seconds)

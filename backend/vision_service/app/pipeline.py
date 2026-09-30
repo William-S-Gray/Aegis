@@ -5,12 +5,19 @@ import logging
 import re
 import time
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from typing import Any, Protocol
 
 from app.client import AegisClient
 from app.types import Frame, Observation, PlateDetector, PlateReader
 
 logger = logging.getLogger(__name__)
+
+
+class VehicleClassifier(Protocol):
+    """Coarse type of the vehicle carrying a plate, e.g. ("car", 0.94)."""
+
+    def classify(self, image: Any, plate: Any) -> tuple[str, float] | None: ...
 
 _NON_ALNUM = re.compile(r"[^A-Z0-9]")
 
@@ -128,6 +135,7 @@ class Pipeline:
         dedupe_window_seconds: float = 30.0,
         confirm_frames: int = 3,
         confirm_window_frames: int = 5,
+        vehicle_classifier: VehicleClassifier | None = None,
         clock=time.monotonic,
     ):
         self._detector = detector
@@ -137,6 +145,7 @@ class Pipeline:
         self._min_publish_confidence = min_publish_confidence
         self._recent = _RecentPlates(dedupe_window_seconds)
         self._confirm_frames = confirm_frames
+        self._vehicle_classifier = vehicle_classifier
         # Per camera: the plates read in each of its last few frames.
         self._history: dict[str, deque[set[str]]] = defaultdict(
             lambda: deque(maxlen=max(confirm_window_frames, confirm_frames))
@@ -215,6 +224,22 @@ class Pipeline:
                 self.stats.unconfirmed += 1
         return confirmed
 
+    def _with_vehicle_type(self, frame: Frame, observation: Observation) -> Observation:
+        """
+        Add the vehicle's type when the detector did not supply one. Only here,
+        once per published vehicle: classification is too slow for every frame.
+        """
+        if self._vehicle_classifier is None or observation.vehicle_type:
+            return observation
+        found = self._vehicle_classifier.classify(frame.image, observation.detection.box)
+        if found is None:
+            return observation
+        vehicle_type, confidence = found
+        detection = replace(
+            observation.detection, vehicle_type=vehicle_type, vehicle_type_confidence=confidence
+        )
+        return replace(observation, detection=detection)
+
     def to_payload(self, observation: Observation) -> dict:
         return {
             "plate_number": observation.plate_text,
@@ -248,6 +273,8 @@ class Pipeline:
             if self._recent.is_duplicate(observation.plate_text, now):
                 self.stats.deduped += 1
                 continue
+
+            observation = self._with_vehicle_type(frame, observation)
 
             if self._client is None:
                 self.stats.published += 1

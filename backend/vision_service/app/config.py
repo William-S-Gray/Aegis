@@ -35,6 +35,9 @@ class VisionSettings(BaseSettings):
     device: str | None = None
     # Boxes below this are not plates. Measured, 0.4 drops under 1% of reads.
     detector_confidence: float = 0.4
+    # Coarse vehicle type (car/truck/bus/motorcycle) for the onnx detector,
+    # classified once per published vehicle; empty turns it off.
+    vehicle_model: str = "rf-detr-nano-384-coco"
 
     # ---- Observability ---
     log_level: str = "INFO"
