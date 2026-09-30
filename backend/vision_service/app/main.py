@@ -58,7 +58,7 @@ def build_detector(settings: VisionSettings) -> tuple[PlateDetector, PlateReader
 
 
 def build_source(uri: str, settings: VisionSettings):
-    if uri.startswith(("rtsp://", "http://", "https://")) or uri.endswith(
+    if uri.startswith(("rtsp://", "http://", "https://", "/dev/video")) or uri.endswith(
         (".mp4", ".avi", ".mkv")
     ):
         return VideoSource(
@@ -98,6 +98,8 @@ def run(settings: VisionSettings, once: bool = False) -> int:
             site_id=settings.site_id,
             min_publish_confidence=settings.min_publish_confidence,
             dedupe_window_seconds=settings.dedupe_window_seconds,
+            confirm_frames=settings.confirm_frames,
+            confirm_window_frames=settings.confirm_window_frames,
         )
 
         preview = Preview(client, settings.preview_interval_seconds)

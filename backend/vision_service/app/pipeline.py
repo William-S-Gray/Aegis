@@ -4,6 +4,7 @@ import base64
 import logging
 import re
 import time
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
 from app.client import AegisClient
@@ -61,6 +62,7 @@ class PipelineStats:
     detections: int = 0
     unreadable: int = 0
     below_floor: int = 0
+    unconfirmed: int = 0
     deduped: int = 0
     published: int = 0
     rejected_by_api: int = 0
@@ -71,6 +73,7 @@ class PipelineStats:
             "detections": self.detections,
             "unreadable": self.unreadable,
             "below_floor": self.below_floor,
+            "unconfirmed": self.unconfirmed,
             "deduped": self.deduped,
             "published": self.published,
             "rejected_by_api": self.rejected_by_api,
@@ -123,6 +126,8 @@ class Pipeline:
         site_id: str | None = None,
         min_publish_confidence: float = 0.50,
         dedupe_window_seconds: float = 30.0,
+        confirm_frames: int = 3,
+        confirm_window_frames: int = 5,
         clock=time.monotonic,
     ):
         self._detector = detector
@@ -131,6 +136,11 @@ class Pipeline:
         self._site_id = site_id
         self._min_publish_confidence = min_publish_confidence
         self._recent = _RecentPlates(dedupe_window_seconds)
+        self._confirm_frames = confirm_frames
+        # Per camera: the plates read in each of its last few frames.
+        self._history: dict[str, deque[set[str]]] = defaultdict(
+            lambda: deque(maxlen=max(confirm_window_frames, confirm_frames))
+        )
         self._clock = clock
         self.stats = PipelineStats()
 
@@ -184,6 +194,27 @@ class Pipeline:
         bind = getattr(self._reader, "bind", None)
         return bind(frame) if callable(bind) else self._reader
 
+    def _confirmed(self, frame: Frame, observations: list[Observation]) -> list[Observation]:
+        """
+        Only reads seen in several of a camera's recent frames.
+
+        One blurred frame can misread a plate with high confidence: on a
+        webcam test, a plate read correctly 142 times was read once as a
+        different plate at 0.92, which would have been auto-accepted. The
+        true reading dominates across frames; a misread does not repeat.
+        """
+        if frame.still or self._confirm_frames <= 1:
+            return observations
+        history = self._history[frame.source]
+        history.append({o.plate_text for o in observations})
+        confirmed = []
+        for observation in observations:
+            if sum(observation.plate_text in seen for seen in history) >= self._confirm_frames:
+                confirmed.append(observation)
+            else:
+                self.stats.unconfirmed += 1
+        return confirmed
+
     def to_payload(self, observation: Observation) -> dict:
         return {
             "plate_number": observation.plate_text,
@@ -204,13 +235,16 @@ class Pipeline:
         published: list[dict] = []
         now = self._clock()
 
+        candidates = []
         for observation in self.observe(frame):
             if observation.plate_confidence < self._min_publish_confidence:
                 # Refused locally to save a round trip; the API enforces its
                 # own floor independently.
                 self.stats.below_floor += 1
                 continue
+            candidates.append(observation)
 
+        for observation in self._confirmed(frame, candidates):
             if self._recent.is_duplicate(observation.plate_text, now):
                 self.stats.deduped += 1
                 continue
