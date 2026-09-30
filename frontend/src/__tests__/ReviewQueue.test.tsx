@@ -54,15 +54,14 @@ describe('ReviewQueue', () => {
     expect(input.value).toBe('');
   });
 
-  it('warns when no image of the plate was captured', async () => {
-    vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
-      if (url.endsWith('/crop')) throw { response: { status: 404 } };
-      return { data: [alertFixture] } as never;
-    });
+  it('warns when no image of the plate was captured, without asking for one', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: [alertFixture] } as never);
 
     renderPage();
 
     expect(await screen.findByText(/no image was captured/i)).toBeInTheDocument();
+    // Asking anyway 404s and shows up as an error in the browser console.
+    expect(get.mock.calls.map(([url]) => url)).toEqual(['/alerts/review-queue']);
   });
 
   it('drops a row someone else already reviewed', async () => {
