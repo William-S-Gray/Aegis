@@ -10,7 +10,7 @@ import { guardAlertsSocketUrl } from '../config';
 import CameraPanel from '../components/CameraPanel';
 import db, { newClientRef } from '../db';
 import api from '../api';
-import { apiMessage } from '../utils/safe';
+import { apiMessage, asArray } from '../utils/safe';
 import { startOfflineSync } from '../services/OfflineSyncService';
 import {
   FiActivity, FiAlertTriangle, FiCheckCircle, FiXCircle,
@@ -48,6 +48,8 @@ const MISMATCH_LABEL: Record<string, string> = {
   color: 'Colour mismatch',
   unregistered: 'Unregistered plate',
 };
+
+const RECENT_LIMIT = 10;
 
 const GuardDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -91,6 +93,31 @@ const GuardDashboard: React.FC = () => {
 
 
   const guardId = user?.id;
+
+  // Seed Recent Alerts from the API, so a guard who signs in or refreshes sees
+  // what already happened instead of an empty board. Only the list: the
+  // decision queue stays live-only, for vehicles actually at the gate now.
+  useEffect(() => {
+    if (!guardId) return;
+    let cancelled = false;
+    api
+      .get('/alerts', { params: { limit: RECENT_LIMIT } })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const loaded = asArray<Alert>(data?.alerts);
+        // Live arrivals may have landed first; keep them on top, once each.
+        setRecentAlerts((prev) => {
+          const seen = new Set(prev.map((a) => a.id));
+          return [...prev, ...loaded.filter((a) => !seen.has(a.id))].slice(0, RECENT_LIMIT);
+        });
+      })
+      .catch(() => {
+        // The live feed still works; the list just starts empty.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [guardId]);
 
   useEffect(() => {
     if (!guardId) {
@@ -158,7 +185,9 @@ const GuardDashboard: React.FC = () => {
 
         const incoming = message.alert;
         setPending((prev) => [...prev, incoming]);
-        setRecentAlerts((prev) => [incoming, ...prev.slice(0, 9)]);
+        setRecentAlerts((prev) =>
+          [incoming, ...prev.filter((a) => a.id !== incoming.id)].slice(0, RECENT_LIMIT)
+        );
         audioRef.current?.play().catch(() => {
           // Autoplay stays blocked until the user interacts with the page.
         });
@@ -344,9 +373,9 @@ const GuardDashboard: React.FC = () => {
               </VStack>
             ) : (
               <VStack spacing={4} align="stretch">
-                {recentAlerts.map((alert, index) => (
+                {recentAlerts.map((alert) => (
                   <Box 
-                    key={index} 
+                    key={alert.id} 
                     p={4} 
                     border="1px" 
                     borderColor={borderColor} 
