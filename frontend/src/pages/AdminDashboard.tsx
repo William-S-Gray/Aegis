@@ -39,7 +39,6 @@ import {
   Text,
   Icon,
   useColorModeValue,
-  Progress,
   Grid,
   FormControl,
   FormHelperText
@@ -54,7 +53,6 @@ import {
   FiRefreshCw,
   FiTrendingUp,
   
-  FiShield,
   FiClock,
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
@@ -134,15 +132,6 @@ const SAMPLE_LOGS: Log[] = [
 ];
 
 const AdminDashboard: React.FC = () => {
-  /*
-   * Uptime and security score have no data source yet; they render as "—"
-   * rather than as invented figures. Wire them to real health/scoring
-   * endpoints when those exist.
-   */
-  const [stats] = useState<{ systemUptime: number | null; securityScore: number | null }>({
-    systemUptime: null,
-    securityScore: null
-  });
   const [loadError, setLoadError] = useState('');
 
   const [recentAlerts, setRecentAlerts] = useState<RecentAlert[]>([]);
@@ -440,7 +429,7 @@ const AdminDashboard: React.FC = () => {
       </VStack>
 
       {/* Stats Grid */}
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6} mb={8}>
+      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
         <Box
           bg={cardBg}
           p={6}
@@ -576,46 +565,6 @@ const AdminDashboard: React.FC = () => {
               w={12}
               h={12}
               borderRadius="xl"
-              bg="blue.50"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              boxShadow="inset 4px 4px 8px #dbeafe, inset -4px -4px 8px #ffffff"
-              border="1px solid"
-              borderColor="blue.200"
-            >
-              <Icon as={FiActivity} w={6} h={6} color="blue.500" />
-            </Box>
-            <VStack align="start" spacing={1}>
-              <Stat>
-                <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.systemUptime === null ? '—' : `${stats.systemUptime}%`}
-                </StatNumber>
-                <StatLabel color="gray.600" fontSize="sm">System Uptime</StatLabel>
-                <Progress value={stats.systemUptime ?? 0} size="sm" colorScheme="blue" borderRadius="full" />
-              </Stat>
-            </VStack>
-          </HStack>
-        </Box>
-
-        <Box
-          bg={cardBg}
-          p={6}
-          borderRadius="xl"
-          boxShadow="6px 6px 12px #d1d5db, -6px -6px 12px #ffffff"
-          border="1px solid"
-          borderColor="gray.200"
-          _hover={{
-            boxShadow: '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff',
-            transform: 'translateY(-2px)',
-            transition: 'all 0.3s ease',
-          }}
-        >
-          <HStack spacing={4}>
-            <Box
-              w={12}
-              h={12}
-              borderRadius="xl"
               bg="purple.50"
               display="flex"
               alignItems="center"
@@ -637,45 +586,6 @@ const AdminDashboard: React.FC = () => {
           </HStack>
         </Box>
 
-        <Box
-          bg={cardBg}
-          p={6}
-          borderRadius="xl"
-          boxShadow="6px 6px 12px #d1d5db, -6px -6px 12px #ffffff"
-          border="1px solid"
-          borderColor="gray.200"
-          _hover={{
-            boxShadow: '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff',
-            transform: 'translateY(-2px)',
-            transition: 'all 0.3s ease',
-          }}
-        >
-          <HStack spacing={4}>
-            <Box
-              w={12}
-              h={12}
-              borderRadius="xl"
-              bg="orange.50"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              boxShadow="inset 4px 4px 8px #fed7aa, inset -4px -4px 8px #ffffff"
-              border="1px solid"
-              borderColor="orange.200"
-            >
-              <Icon as={FiShield} w={6} h={6} color="orange.500" />
-            </Box>
-            <VStack align="start" spacing={1}>
-              <Stat>
-                <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.securityScore ?? '—'}
-                </StatNumber>
-                <StatLabel color="gray.600" fontSize="sm">Security Score</StatLabel>
-                <Progress value={stats.securityScore ?? 0} size="sm" colorScheme="orange" borderRadius="full" />
-              </Stat>
-            </VStack>
-          </HStack>
-        </Box>
       </SimpleGrid>
 
       {/* Alerts and Activity Section */}
