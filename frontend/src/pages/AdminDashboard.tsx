@@ -39,9 +39,9 @@ import {
   Text,
   Icon,
   useColorModeValue,
-  Progress,
   Grid,
-  FormControl
+  FormControl,
+  FormHelperText
 } from '@chakra-ui/react';
 import {
   FiUsers,
@@ -53,7 +53,6 @@ import {
   FiRefreshCw,
   FiTrendingUp,
   
-  FiShield,
   FiClock,
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
@@ -76,9 +75,17 @@ interface Vehicle {
   plate_display?: string;
   make: string;
   model: string;
-  color: string;
-  owner_id: string;
+  color: string | null;
+  vehicle_type?: string | null;
+  owner_id: string | null;
 }
+
+// Suggestions only: the detector's labels vary by model, and equivalences
+// (e.g. SUV = crossover) are declared as attribute rules.
+const VEHICLE_TYPES = ['sedan', 'hatchback', 'suv', 'van', 'pickup', 'truck', 'motorcycle', 'bus'];
+
+type VehicleForm = { plate_number: string; make: string; model: string; color: string; vehicle_type: string; owner_id: string };
+const EMPTY_VEHICLE: VehicleForm = { plate_number: '', make: '', model: '', color: '', vehicle_type: '', owner_id: '' };
 
 interface Log {
   id: string;
@@ -98,10 +105,8 @@ interface RecentAlert {
 }
 
 interface Analytics {
-  totalUsers: number;
   totalVehicles: number;
   totalLogs: number;
-  activeUsers: number;
   weeklyGrowth: number;
   pendingAlerts: number;
 }
@@ -127,15 +132,6 @@ const SAMPLE_LOGS: Log[] = [
 ];
 
 const AdminDashboard: React.FC = () => {
-  /*
-   * Uptime and security score have no data source yet; they render as "—"
-   * rather than as invented figures. Wire them to real health/scoring
-   * endpoints when those exist.
-   */
-  const [stats] = useState<{ systemUptime: number | null; securityScore: number | null }>({
-    systemUptime: null,
-    securityScore: null
-  });
   const [loadError, setLoadError] = useState('');
 
   const [recentAlerts, setRecentAlerts] = useState<RecentAlert[]>([]);
@@ -151,13 +147,7 @@ const AdminDashboard: React.FC = () => {
 
   // Vehicle Management
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [vehicleForm, setVehicleForm] = useState<Omit<Vehicle, 'id'>>({ 
-    plate_number: '', 
-    make: '', 
-    model: '', 
-    color: '', 
-    owner_id: '' 
-  });
+  const [vehicleForm, setVehicleForm] = useState<VehicleForm>(EMPTY_VEHICLE);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const { isOpen: isVehicleOpen, onOpen: onVehicleOpen, onClose: onVehicleClose } = useDisclosure();
   const [loadingVehicles, setLoadingVehicles] = useState(false);
@@ -168,10 +158,8 @@ const AdminDashboard: React.FC = () => {
 
   // Analytics
   const [analytics, setAnalytics] = useState<Analytics>({
-    totalUsers: 0,
     totalVehicles: 0,
     totalLogs: 0,
-    activeUsers: 0,
     weeklyGrowth: 0,
     pendingAlerts: 0
   });
@@ -206,11 +194,6 @@ const AdminDashboard: React.FC = () => {
         if (cancelled) return;
         const userData = asArray<User>(res.data);
         setUsers(userData);
-        setAnalytics(prev => ({
-          ...prev,
-          totalUsers: userData.length,
-          activeUsers: userData.filter(u => u.is_active).length
-        }));
       })
       .catch((err: Error) => {
         if (cancelled) return;
@@ -221,11 +204,6 @@ const AdminDashboard: React.FC = () => {
         const fallback = mockAuthEnabled ? SAMPLE_USERS : [];
         setUsers(fallback);
         setLoadError(mockAuthEnabled ? '' : 'Could not load data from the server.');
-        setAnalytics(prev => ({
-          ...prev,
-          totalUsers: fallback.length,
-          activeUsers: fallback.filter(u => u.is_active).length
-        }));
       })
       .finally(() => { if (!cancelled) setLoadingUsers(false); });
     return () => { cancelled = true; };
@@ -328,9 +306,20 @@ const AdminDashboard: React.FC = () => {
   };
 
   // Vehicle CRUD
-  const handleVehicleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => setVehicleForm({ ...vehicleForm, [e.target.name]: e.target.value });
-  const openEditVehicle = (v: Vehicle) => { setEditingVehicle(v); const { id: _ignoredId, ...rest } = v; setVehicleForm(rest); onVehicleOpen(); };
-  const openCreateVehicle = () => { setEditingVehicle(null); setVehicleForm({ plate_number: '', make: '', model: '', color: '', owner_id: '' }); onVehicleOpen(); };
+  const handleVehicleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setVehicleForm({ ...vehicleForm, [e.target.name]: e.target.value });
+  const openEditVehicle = (v: Vehicle) => {
+    setEditingVehicle(v);
+    setVehicleForm({
+      plate_number: v.plate_number,
+      make: v.make ?? '',
+      model: v.model ?? '',
+      color: v.color ?? '',
+      vehicle_type: v.vehicle_type ?? '',
+      owner_id: v.owner_id ?? '',
+    });
+    onVehicleOpen();
+  };
+  const openCreateVehicle = () => { setEditingVehicle(null); setVehicleForm(EMPTY_VEHICLE); onVehicleOpen(); };
   
   const handleVehicleSubmit = async () => {
     try {
@@ -338,12 +327,17 @@ const AdminDashboard: React.FC = () => {
         // The plate itself is immutable: changing it would silently rewrite the
         // vehicle that historical access logs and alerts refer to.
         const { plate_number: _plate, ...editable } = vehicleForm;
-        const { data } = await api.patch<Vehicle>(`/vehicles/${editingVehicle.id}`, editable);
+        const { data } = await api.patch<Vehicle>(`/vehicles/${editingVehicle.id}`, {
+          ...editable,
+          vehicle_type: editable.vehicle_type || null,
+          owner_id: editable.owner_id || null,
+        });
         setVehicles(prev => prev.map(v => (v.id === editingVehicle.id ? data : v)));
         toast({ title: 'Vehicle updated', status: 'success' });
       } else {
         const payload = {
           ...vehicleForm,
+          vehicle_type: vehicleForm.vehicle_type || null,
           owner_id: vehicleForm.owner_id || null,
         };
         const { data } = await api.post<Vehicle>('/vehicles', payload);
@@ -435,7 +429,7 @@ const AdminDashboard: React.FC = () => {
       </VStack>
 
       {/* Stats Grid */}
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6} mb={8}>
+      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
         <Box
           bg={cardBg}
           p={6}
@@ -467,7 +461,7 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {analytics.totalUsers}
+                  {users.length}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Total Users</StatLabel>
               </Stat>
@@ -571,46 +565,6 @@ const AdminDashboard: React.FC = () => {
               w={12}
               h={12}
               borderRadius="xl"
-              bg="blue.50"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              boxShadow="inset 4px 4px 8px #dbeafe, inset -4px -4px 8px #ffffff"
-              border="1px solid"
-              borderColor="blue.200"
-            >
-              <Icon as={FiActivity} w={6} h={6} color="blue.500" />
-            </Box>
-            <VStack align="start" spacing={1}>
-              <Stat>
-                <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.systemUptime === null ? '—' : `${stats.systemUptime}%`}
-                </StatNumber>
-                <StatLabel color="gray.600" fontSize="sm">System Uptime</StatLabel>
-                <Progress value={stats.systemUptime ?? 0} size="sm" colorScheme="blue" borderRadius="full" />
-              </Stat>
-            </VStack>
-          </HStack>
-        </Box>
-
-        <Box
-          bg={cardBg}
-          p={6}
-          borderRadius="xl"
-          boxShadow="6px 6px 12px #d1d5db, -6px -6px 12px #ffffff"
-          border="1px solid"
-          borderColor="gray.200"
-          _hover={{
-            boxShadow: '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff',
-            transform: 'translateY(-2px)',
-            transition: 'all 0.3s ease',
-          }}
-        >
-          <HStack spacing={4}>
-            <Box
-              w={12}
-              h={12}
-              borderRadius="xl"
               bg="purple.50"
               display="flex"
               alignItems="center"
@@ -632,45 +586,6 @@ const AdminDashboard: React.FC = () => {
           </HStack>
         </Box>
 
-        <Box
-          bg={cardBg}
-          p={6}
-          borderRadius="xl"
-          boxShadow="6px 6px 12px #d1d5db, -6px -6px 12px #ffffff"
-          border="1px solid"
-          borderColor="gray.200"
-          _hover={{
-            boxShadow: '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff',
-            transform: 'translateY(-2px)',
-            transition: 'all 0.3s ease',
-          }}
-        >
-          <HStack spacing={4}>
-            <Box
-              w={12}
-              h={12}
-              borderRadius="xl"
-              bg="orange.50"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              boxShadow="inset 4px 4px 8px #fed7aa, inset -4px -4px 8px #ffffff"
-              border="1px solid"
-              borderColor="orange.200"
-            >
-              <Icon as={FiShield} w={6} h={6} color="orange.500" />
-            </Box>
-            <VStack align="start" spacing={1}>
-              <Stat>
-                <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {stats.securityScore ?? '—'}
-                </StatNumber>
-                <StatLabel color="gray.600" fontSize="sm">Security Score</StatLabel>
-                <Progress value={stats.securityScore ?? 0} size="sm" colorScheme="orange" borderRadius="full" />
-              </Stat>
-            </VStack>
-          </HStack>
-        </Box>
       </SimpleGrid>
 
       {/* Alerts and Activity Section */}
@@ -931,7 +846,8 @@ const AdminDashboard: React.FC = () => {
                       <Th>Make</Th>
                       <Th>Model</Th>
                       <Th>Color</Th>
-                      <Th>Owner ID</Th>
+                      <Th>Type</Th>
+                      <Th>Owner</Th>
                       <Th>Actions</Th>
                     </Tr>
                   </Thead>
@@ -943,11 +859,12 @@ const AdminDashboard: React.FC = () => {
                         <Td>{v.model}</Td>
                         <Td>
                           <HStack spacing={2}>
-                            <Box w={3} h={3} bg={v.color.toLowerCase()} borderRadius="full" />
-                            <Text>{v.color}</Text>
+                            {v.color && <Box w={3} h={3} bg={v.color.toLowerCase()} borderRadius="full" />}
+                            <Text>{v.color || '—'}</Text>
                           </HStack>
                         </Td>
-                        <Td>{v.owner_id}</Td>
+                        <Td>{v.vehicle_type || '—'}</Td>
+                        <Td>{users.find(u => u.id === v.owner_id)?.full_name ?? (v.owner_id ? 'Unknown user' : '—')}</Td>
                         <Td>
                           <HStack spacing={2}>
                             <Button size="xs" onClick={() => openEditVehicle(v)}>Edit</Button>
@@ -1047,6 +964,7 @@ const AdminDashboard: React.FC = () => {
                 <Input
                   name="email"
                   type="email"
+                  autoComplete="off"
                   value={userForm.email}
                   onChange={handleUserFormChange}
                   borderRadius="lg"
@@ -1065,6 +983,7 @@ const AdminDashboard: React.FC = () => {
                   <Input
                     name="password"
                     type="password"
+                    autoComplete="new-password"
                     value={userForm.password}
                     onChange={handleUserFormChange}
                     borderRadius="lg"
@@ -1200,21 +1119,29 @@ const AdminDashboard: React.FC = () => {
                   }}
                 />
               </FormControl>
-              <FormControl isRequired>
-                <FormLabel color="gray.700">Owner ID</FormLabel>
+              <FormControl>
+                <FormLabel color="gray.700">Type</FormLabel>
                 <Input
-                  name="owner_id"
-                  value={vehicleForm.owner_id}
+                  name="vehicle_type"
+                  list="vehicle-types"
+                  value={vehicleForm.vehicle_type}
                   onChange={handleVehicleFormChange}
+                  placeholder="e.g. sedan"
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
-                  border="1px solid"
-                  borderColor="gray.200"
-                  _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
-                    borderColor: 'brand.400',
-                  }}
                 />
+                <datalist id="vehicle-types">
+                  {VEHICLE_TYPES.map(t => <option key={t} value={t} />)}
+                </datalist>
+                <FormHelperText>Compared with the detected type to flag mismatches.</FormHelperText>
+              </FormControl>
+              <FormControl>
+                <FormLabel color="gray.700">Owner</FormLabel>
+                <Select name="owner_id" value={vehicleForm.owner_id} onChange={handleVehicleFormChange} borderRadius="lg">
+                  <option value="">No owner</option>
+                  {users.filter(u => u.is_active || u.id === vehicleForm.owner_id).map(u => (
+                    <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
+                  ))}
+                </Select>
               </FormControl>
             </VStack>
           </ModalBody>

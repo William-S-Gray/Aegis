@@ -14,7 +14,7 @@ from sqlalchemy import (
     Text,
     Uuid,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
 from app.database import Base
 
@@ -128,6 +128,8 @@ class Alert(Base):
     # can see rather than re-typing the machine's guess. Deferred: list
     # endpoints never load it. Personal data with its own, shorter retention.
     plate_crop: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    # Lets the UI ask for the image only when there is one, without loading it.
+    has_crop: Mapped[bool] = column_property(plate_crop.column.is_not(None))
 
     # Identifies which detector produced this read, so accuracy can be compared
     # across model versions rather than guessed at.

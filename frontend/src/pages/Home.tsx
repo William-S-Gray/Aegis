@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Heading, Text, Button, Stack, VStack, HStack, Icon, useColorModeValue } from '@chakra-ui/react';
+import { Box, Heading, Text, Button, Stack, VStack, Icon, useColorModeValue } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { Link as RouterLink } from 'react-router-dom';
 import { FiShield, FiUsers, FiTruck, FiActivity } from 'react-icons/fi';
@@ -193,53 +193,6 @@ const Home: React.FC = () => {
           ))}
         </Box>
       </VStack>
-
-      {/* Stats Section */}
-      <Box
-        mt={16}
-        bg="white"
-        p={8}
-        borderRadius="2xl"
-        boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
-        border="1px solid"
-        borderColor="gray.200"
-      >
-        <VStack spacing={8}>
-          <Heading 
-            size="lg" 
-            textAlign="center"
-            bgGradient="linear(to-r, brand.500, brand.600)"
-            bgClip="text"
-            fontWeight="bold"
-          >
-            System Statistics
-          </Heading>
-          
-          <HStack 
-            spacing={8} 
-            justify="center" 
-            flexWrap="wrap"
-            textAlign="center"
-          >
-            <VStack>
-              <Text fontSize="3xl" fontWeight="bold" color="brand.500">99.9%</Text>
-              <Text fontSize="sm" color="gray.600">Uptime</Text>
-            </VStack>
-            <VStack>
-              <Text fontSize="3xl" fontWeight="bold" color="brand.500">24/7</Text>
-              <Text fontSize="sm" color="gray.600">Monitoring</Text>
-            </VStack>
-            <VStack>
-              <Text fontSize="3xl" fontWeight="bold" color="brand.500">1000+</Text>
-              <Text fontSize="sm" color="gray.600">Vehicles</Text>
-            </VStack>
-            <VStack>
-              <Text fontSize="3xl" fontWeight="bold" color="brand.500">50+</Text>
-              <Text fontSize="sm" color="gray.600">Users</Text>
-            </VStack>
-          </HStack>
-        </VStack>
-      </Box>
     </Box>
   );
 };

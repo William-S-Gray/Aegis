@@ -219,6 +219,7 @@ class AlertPublic(BaseModel):
     reviewed_at: datetime | None = None
     detector_name: str | None = None
     detector_version: str | None = None
+    has_crop: bool = False
 
     comments: list[AlertCommentPublic] = []
 

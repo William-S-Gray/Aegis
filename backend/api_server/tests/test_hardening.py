@@ -322,6 +322,9 @@ class TestPlateImage:
         body = client.get("/api/v1/alerts", headers=guard).json()
 
         assert "plate_crop" not in str(body)
+        # Only whether one exists, so the review page asks just for images that do.
+        queue = client.get("/api/v1/alerts/review-queue", headers=guard).json()
+        assert [a["has_crop"] for a in queue] == [True]
 
 
 # ---------------------------------------------------------- access logs

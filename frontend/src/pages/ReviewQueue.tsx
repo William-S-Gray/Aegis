@@ -33,6 +33,7 @@ interface ReviewAlert {
   review_reason?: ReviewReason | null;
   detector_name?: string | null;
   detector_version?: string | null;
+  has_crop?: boolean;
   timestamp: string;
 }
 
@@ -55,10 +56,11 @@ const confidenceScheme = (value?: number | null) => {
  * The plate as the camera captured it. Fetched through the API client because
  * the endpoint needs the bearer token, which an <img src> cannot send.
  */
-const PlateCrop: React.FC<{ alertId: string }> = ({ alertId }) => {
+const PlateCrop: React.FC<{ alertId: string; hasCrop: boolean }> = ({ alertId, hasCrop }) => {
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!hasCrop) return undefined;
     let cancelled = false;
     let url: string | null = null;
     api
@@ -75,7 +77,7 @@ const PlateCrop: React.FC<{ alertId: string }> = ({ alertId }) => {
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [alertId]);
+  }, [alertId, hasCrop]);
 
   if (!src) {
     return (
@@ -261,7 +263,7 @@ const ReviewQueue: React.FC = () => {
               </Box>
             </Flex>
 
-            <PlateCrop alertId={alert.id} />
+            <PlateCrop alertId={alert.id} hasCrop={Boolean(alert.has_crop)} />
 
             <HStack spacing={8} mb={4} fontSize="sm" wrap="wrap">
               <Box>
