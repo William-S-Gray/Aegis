@@ -1,14 +1,8 @@
-# Optional ML stack for the real detector and OCR.
-#
-# Roughly 3 GB installed and materially faster with a CUDA GPU. Install on top
-# of requirements.txt:
+# Real plate detection and reading, on ONNX Runtime (CPU by default; no torch).
+# About 100 MB installed; the two models add ~11 MB on first use. Install on
+# top of requirements.txt:
 #     pip install -r requirements.txt -r requirements-ml.txt
-#
-# Tesseract also needs the system package:
-#     sudo apt install tesseract-ocr
-#
-# NOTE: stock YOLO weights detect vehicles, not licence plates. Point
-# VISION_MODEL_PATH at plate-specific weights.
-ultralytics==8.3.55
 opencv-python-headless==4.10.0.84
-pytesseract==0.3.13
+onnxruntime==1.30.0
+open-image-models==0.6.0
+fast-plate-ocr==1.1.0

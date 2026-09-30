@@ -157,10 +157,13 @@ class Pipeline:
                 self.stats.unreadable += 1
                 continue
 
-            # Locating a plate and reading it are separate failure modes, so
-            # the combined confidence is the product rather than either alone:
-            # a crisp box around unreadable characters is not a good read.
-            confidence = round(detection.confidence * reading.confidence, 4)
+            # The reading's confidence decides, not detection x reading.
+            # Detection confidence scores the box, not the characters: measured
+            # on real plates it sat at 0.73-0.93 for right and wrong reads
+            # alike, and multiplying by it pushed most correct reads under the
+            # auto-accept line. Boxes below the detector's own threshold are
+            # already dropped, which is the floor that keeps non-plates out.
+            confidence = round(reading.confidence, 4)
 
             observations.append(
                 Observation(

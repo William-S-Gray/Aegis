@@ -72,4 +72,9 @@ class StubPlateReader:
 
         if self._frame is None:
             return None
-        return PlateReading(text=self._detector.plate_for(self._frame), confidence=1.0)
+        # The pipeline gates on the reading's confidence, so carry the stub's
+        # varied score here; a constant 1.0 would never exercise the review queue.
+        return PlateReading(
+            text=self._detector.plate_for(self._frame),
+            confidence=self._detector.detect(self._frame)[0].confidence,
+        )

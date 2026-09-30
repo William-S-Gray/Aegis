@@ -190,9 +190,10 @@ and retained footage is a far larger processing operation than the plate text.
   erasure SLA, or document a re-erasure step after any restore. **DECISION.**
 - **Free-text comments** can contain anything, including special-category
   information a guard types. Mitigate by training, not by code.
-- **Detector accuracy is unmeasured in production** until real weights are
-  deployed and the correction rate is observed. Until then, no accuracy figure
-  should be quoted to anyone.
+- **Detector accuracy is unmeasured in production.** It has been measured only
+  on public data, not on this site's cameras. Until it is measured on local
+  footage (`python -m app.evaluate`) and the correction rate is observed, no
+  accuracy figure should be quoted to anyone.
 - **A `%plate%` search over audit payloads is a sequential scan.** Acceptable
   now; if subject requests become frequent, add the documented trigram index.
 

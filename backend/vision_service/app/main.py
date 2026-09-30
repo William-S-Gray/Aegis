@@ -31,13 +31,11 @@ def _handle_signal(signum: int, _frame: FrameType | None) -> None:
 
 
 def build_detector(settings: VisionSettings) -> tuple[PlateDetector, PlateReader]:
-    if settings.detector == "yolo":
-        from app.detectors.yolo import YoloPlateDetector
+    if settings.detector == "onnx":
+        from app.detectors.plate_onnx import OnnxPlateDetector
 
-        if not settings.model_path:
-            raise RuntimeError("VISION_MODEL_PATH must be set when using the YOLO detector")
-        detector = YoloPlateDetector(
-            model_path=settings.model_path,
+        detector = OnnxPlateDetector(
+            model=settings.detector_model,
             confidence_threshold=settings.detector_confidence,
             device=settings.device,
         )
@@ -48,10 +46,10 @@ def build_detector(settings: VisionSettings) -> tuple[PlateDetector, PlateReader
         )
         detector = StubPlateDetector()
 
-    if settings.reader == "tesseract":
-        from app.ocr.tesseract import TesseractPlateReader
+    if settings.reader == "onnx":
+        from app.ocr.fast_plate import FastPlateReader
 
-        reader: PlateReader = TesseractPlateReader()
+        reader: PlateReader = FastPlateReader(model=settings.reader_model, device=settings.device)
     else:
         # The stub reader is paired with the stub detector by construction.
         reader = StubPlateReader(detector if isinstance(detector, StubPlateDetector) else StubPlateDetector())
