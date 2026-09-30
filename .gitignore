@@ -50,5 +50,6 @@ backups/
 *.dump
 *.dump.sha256
 
-# Prometheus scrape credential
+# Monitoring credentials
 monitoring/metrics-token
+monitoring/discord-webhook-url
