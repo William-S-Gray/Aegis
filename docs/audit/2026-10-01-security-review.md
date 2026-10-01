@@ -54,4 +54,4 @@ that now run on every camera host.
 | ID | Risk | Likelihood / impact | Mitigation today | Next step |
 |---|---|---|---|---|
 | R-010 | A model named in `VISION_*_MODEL` other than the defaults downloads at runtime without a checksum | Low / High | Only the measured defaults are baked in and verified; changing models is an operator action | Bake any model you switch to into the image, with its hash, rather than downloading at runtime |
-| R-011 | Python dependencies are pinned by version, not by hash, across all services | Low / High | Exact version pins; `npm ci` uses a lockfile with integrity hashes | `pip install --require-hashes` from compiled lock files |
+| R-011 | ~~Python dependencies pinned by version, not by hash~~ | — | **Resolved.** Images install `requirements.lock` (every package, including transitive, with SHA-256) using `--require-hashes --only-binary :all:`; the unpinned `pip install --upgrade pip` is gone. A build with one altered hash fails | Regenerate the lock with pip-compile after changing `requirements.txt` |

@@ -9,16 +9,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-# argon2-cffi and psycopg need a compiler; the toolchain stays in this stage
-# and never reaches the runtime image.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
+# Installed from the lock: every package, including transitive ones, at an
+# exact version with its SHA-256, so a build gets the files that were tested
+# and a tampered release fails it. Wheels only: pip does not hash-check what
+# it fetches to build from source. See requirements.txt to change a version.
+COPY requirements.lock .
 RUN python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install -r requirements.txt
+    && /opt/venv/bin/pip install --require-hashes --only-binary :all: -r requirements.lock
 
 # ---------------------------------------------------------------- runtime
 FROM python:3.12-slim AS runtime

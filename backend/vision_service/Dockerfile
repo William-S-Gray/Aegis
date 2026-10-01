@@ -12,10 +12,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-COPY requirements.txt requirements-ml.txt ./
+# Installed from the lock: every package, including transitive ones, at an
+# exact version with its SHA-256, so a build gets the files that were tested
+# and a tampered release fails it. Wheels only: pip does not hash-check what
+# it fetches to build from source. See requirements.txt to change a version.
+COPY requirements.lock .
 RUN python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install -r requirements.txt -r requirements-ml.txt
+    && /opt/venv/bin/pip install --require-hashes --only-binary :all: -r requirements.lock
 
 FROM python:3.12-slim AS runtime
 

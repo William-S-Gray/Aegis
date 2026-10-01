@@ -1,3 +1,7 @@
+# Top-level dependencies. The images install requirements.lock, which pins
+# every transitive dependency with hashes; after changing a version here,
+# regenerate it (pip-tools):
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras -o requirements.lock requirements.txt requirements-ml.txt
 # Core service. Runs the pipeline with the stub detector and no ML stack.
 httpx==0.28.1
 pydantic==2.11.7
