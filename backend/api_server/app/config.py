@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     plate_review_floor_confidence: float = 0.50
     # Vehicle-type confidence below this sends an otherwise-good read to review.
     type_review_confidence: float = 0.60
+    # A plate narrower than this many pixels in the image goes to review however
+    # confident the reader is. Measured on hand-labelled video: the reader drops
+    # a character from small plates (34VY880 for 34VY8802) and stays confident,
+    # and repeats the mistake on every frame, so confirmation cannot catch it.
+    # At 120 px, wrong auto-accepts fell from 4 to 1 and no correct read was lost
+    # (8 went to review instead). 0 turns it off.
+    plate_auto_accept_min_width: int = 120
 
     # Login throttling
     login_max_attempts: int = 5

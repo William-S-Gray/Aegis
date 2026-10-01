@@ -54,6 +54,7 @@ class ReviewReason(str, enum.Enum):
     LOW_PLATE_CONFIDENCE = "low_plate_confidence"
     LOW_TYPE_CONFIDENCE = "low_type_confidence"
     AMBIGUOUS_PLATE = "ambiguous_plate"
+    SMALL_PLATE = "small_plate"
 
 
 class MismatchType(str, enum.Enum):

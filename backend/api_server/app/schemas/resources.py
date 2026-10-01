@@ -248,6 +248,8 @@ class AlertCreate(BaseModel):
 
     # The plate crop as base64 JPEG, for the human reviewer. ~64 KB decoded.
     plate_crop_jpeg: str | None = Field(default=None, max_length=90_000)
+    # Width of the plate in the camera image, for the small-plate review rule.
+    plate_width_px: int | None = Field(default=None, ge=1, le=20_000)
 
     @field_validator("plate_crop_jpeg")
     @classmethod

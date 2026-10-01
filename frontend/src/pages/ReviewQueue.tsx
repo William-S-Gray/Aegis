@@ -18,7 +18,7 @@ import { FiCheckCircle, FiRefreshCw } from 'react-icons/fi';
 import api from '../api';
 import { apiMessage, asArray } from '../utils/safe';
 
-type ReviewReason = 'low_plate_confidence' | 'low_type_confidence' | 'ambiguous_plate';
+type ReviewReason = 'low_plate_confidence' | 'low_type_confidence' | 'ambiguous_plate' | 'small_plate';
 
 interface ReviewAlert {
   id: string;
@@ -41,6 +41,7 @@ const REASON_LABEL: Record<string, string> = {
   low_plate_confidence: 'Plate read was uncertain',
   low_type_confidence: 'Vehicle type was uncertain',
   ambiguous_plate: 'Plate was ambiguous',
+  small_plate: 'Plate was small in the image',
 };
 
 const toPercent = (value?: number | null) =>
