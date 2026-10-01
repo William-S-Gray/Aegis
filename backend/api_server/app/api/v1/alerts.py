@@ -95,6 +95,29 @@ def _pair_allowed(db: Session, attribute: str, a: str | None, b: str | None) -> 
     )
 
 
+# The coarse classes a general-purpose vehicle detector reports, and the
+# registered types each is consistent with. Detectors split vans and pickups
+# between "car" and "truck", so either class matches them.
+TYPE_FAMILIES: dict[str, set[str]] = {
+    "car": {
+        "car", "sedan", "saloon", "hatchback", "suv", "crossover", "coupe", "convertible",
+        "estate", "wagon", "mpv", "minivan", "van", "pickup",
+    },
+    "truck": {"truck", "lorry", "hgv", "van", "pickup"},
+    "bus": {"bus", "coach", "minibus"},
+    "motorcycle": {"motorcycle", "motorbike", "scooter", "moped"},
+}
+
+
+def _type_consistent(detected: str, registered: str) -> bool:
+    """
+    A coarse detection ("car") matches any registered type in its family
+    ("suv"). A detector that reports fine types is compared exactly, as before.
+    """
+    family = TYPE_FAMILIES.get(detected.strip().lower())
+    return family is not None and registered.strip().lower() in family
+
+
 def classify_mismatch(db: Session, alert: Alert, vehicle: Vehicle | None) -> MismatchType:
     """
     Decide why (or whether) a detection deserves attention.
@@ -106,7 +129,10 @@ def classify_mismatch(db: Session, alert: Alert, vehicle: Vehicle | None) -> Mis
         return MismatchType.UNREGISTERED
 
     if alert.detected_type and vehicle.vehicle_type:
-        if not _pair_allowed(db, "type", alert.detected_type, vehicle.vehicle_type):
+        if not (
+            _type_consistent(alert.detected_type, vehicle.vehicle_type)
+            or _pair_allowed(db, "type", alert.detected_type, vehicle.vehicle_type)
+        ):
             return MismatchType.TYPE
 
     if alert.detected_color and vehicle.color:

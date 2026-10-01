@@ -31,14 +31,24 @@ RUN apt-get update \
 
 COPY --from=builder /opt/venv /opt/venv
 
-WORKDIR /app
-COPY --chown=vision:vision app ./app
-
 USER vision
 
-# Bake the default models into the vision user's cache. Other models named via
-# VISION_DETECTOR_MODEL / VISION_READER_MODEL download on first use.
-RUN python -c "from app.detectors.plate_onnx import OnnxPlateDetector as D; from app.ocr.fast_plate import FastPlateReader as R; D(); R()"
+# Bake the default models into the vision user's cache, in their own layer so
+# a code change does not re-download them (~130 MB, slow from GitHub). Names
+# match the VISION_*_MODEL defaults; other models download on first use. The
+# libraries download without a timeout, so a stalled connection would hang the
+# build forever: fail it after 60 s of silence and retry.
+RUN for attempt in 1 2 3; do \
+      python -c "import socket; socket.setdefaulttimeout(60); \
+from open_image_models import create_detector as d; \
+from fast_plate_ocr import LicensePlateRecognizer as r; \
+d('yolo-v9-t-640-license-plate-end2end'); r('cct-xs-v2-global-model'); d('rf-detr-nano-384-coco')" \
+      && break; \
+      [ "$attempt" = 3 ] && exit 1; sleep 5; \
+    done
+
+WORKDIR /app
+COPY --chown=vision:vision app ./app
 
 # Long-running capture process; no port is exposed.
 CMD ["python", "-m", "app.main"]
