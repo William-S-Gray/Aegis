@@ -162,6 +162,17 @@ about 1.5 s. Reads that never confirm are counted as `unconfirmed`. Still
 images (a directory source, `app.evaluate`) are not confirmed, because each is
 its own picture.
 
+## Several cameras
+
+List them all in `VISION_SOURCES`. Each camera runs in its own thread with
+its own confirmation and de-duplication, sharing the models and API
+connection. A camera that fails is logged, and the others keep running. On a
+laptop CPU, one camera at the default 0.5 s interval uses about a third of a
+core. Add CPU, or raise `VISION_FRAME_INTERVAL_SECONDS`, as cameras are added.
+
+Video files are paced by their own timestamps, so replaying recorded footage
+analyses it at the configured interval rather than skipping most of it.
+
 ## De-duplication
 
 A car waiting at a barrier appears in every frame. `VISION_DEDUPE_WINDOW_SECONDS`
@@ -191,8 +202,6 @@ needs OpenCV (`requirements-ml.txt`; the Docker image includes it).
   register, list alerts, confirm plates, or record an access decision. Camera
   hosts sit at the network edge and are often physically reachable, so this is
   the account most likely to be compromised.
-- Run one process per camera, or add a worker pool — the loop is currently
-  sequential across sources.
 - Build a labelled evaluation set from your own cameras and measure
   before/after every model change (below).
 

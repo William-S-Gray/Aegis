@@ -413,3 +413,21 @@ class TestSourceKind:
         started = time.monotonic()
         assert list(source.frames()) == []
         assert time.monotonic() - started < 5
+
+
+def test_a_video_file_is_paced_by_its_own_timestamps(tmp_path):
+    """A file decodes faster than real time; wall-clock pacing skipped nearly all of it."""
+    cv2 = pytest.importorskip("cv2")
+    import numpy as np
+
+    from app.sources import VideoSource
+
+    path = str(tmp_path / "clip.avi")
+    writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"MJPG"), 10, (64, 48))
+    for _ in range(50):  # 5 seconds at 10 fps
+        writer.write(np.zeros((48, 64, 3), np.uint8))
+    writer.release()
+
+    frames = list(VideoSource(path, frame_interval_seconds=0.5).frames())
+
+    assert len(frames) == 10  # one per 0.5 s of footage

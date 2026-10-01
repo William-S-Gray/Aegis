@@ -112,7 +112,7 @@ class VideoSource:
                 self._stop.wait(self._reconnect_delay)
                 continue
 
-            last_emit = 0.0
+            last_emit = float("-inf")
             try:
                 while True:
                     ok, image = capture.read()
@@ -120,7 +120,14 @@ class VideoSource:
                         logger.info("Stream %s ended or stalled", self._uri)
                         break
 
-                    now = time.monotonic()
+                    # A file decodes far faster than real time, so pace it by
+                    # its own timestamps: on the wall clock a minute of footage
+                    # went by in a second and only its first frame was read.
+                    now = (
+                        time.monotonic()
+                        if self._live
+                        else capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
+                    )
                     if now - last_emit < self._interval:
                         continue
                     last_emit = now
