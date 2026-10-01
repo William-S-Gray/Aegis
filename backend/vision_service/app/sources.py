@@ -11,6 +11,9 @@ from app.types import Frame
 logger = logging.getLogger(__name__)
 
 
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
+
 class ImageDirectorySource:
     """
     Replays still images from a directory.
@@ -26,9 +29,10 @@ class ImageDirectorySource:
         self._loop = loop
 
     def frames(self) -> Iterator[Frame]:
-        patterns = ("*.jpg", "*.jpeg", "*.png", "*.bmp")
         while True:
-            paths = sorted(p for pattern in patterns for p in self._directory.glob(pattern))
+            # By suffix, any case: phones and cameras write IMG_0001.JPG and
+            # .webp, and a glob for "*.jpg" silently skipped both.
+            paths = sorted(p for p in self._directory.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
             if not paths:
                 logger.warning("No images found in %s", self._directory)
                 return
