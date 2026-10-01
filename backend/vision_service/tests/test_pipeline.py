@@ -431,3 +431,16 @@ def test_a_video_file_is_paced_by_its_own_timestamps(tmp_path):
     frames = list(VideoSource(path, frame_interval_seconds=0.5).frames())
 
     assert len(frames) == 10  # one per 0.5 s of footage
+
+
+def test_image_directories_include_webp_and_uppercase_suffixes(tmp_path, monkeypatch):
+    """A user's test set of 13 photos lost its two .webp files; phones write .JPG."""
+    import app.sources as sources
+
+    for name in ["a.jpg", "b.JPG", "c.jpeg", "d.webp", "e.PNG", "notes.txt"]:
+        (tmp_path / name).write_bytes(b"x")
+    monkeypatch.setattr(sources, "_load_image", lambda path: path.name)
+
+    frames = list(sources.ImageDirectorySource(tmp_path).frames())
+
+    assert [f.image for f in frames] == ["a.jpg", "b.JPG", "c.jpeg", "d.webp", "e.PNG"]
