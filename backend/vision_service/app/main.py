@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextvars
 import logging
 import signal
 import sys
@@ -100,37 +101,51 @@ def run(settings: VisionSettings, once: bool = False) -> int:
         email=settings.service_email,
         password=settings.service_password,
     ) as client:
-        pipeline = Pipeline(
-            detector,
-            reader,
-            client,
-            site_id=settings.site_id,
-            min_publish_confidence=settings.min_publish_confidence,
-            dedupe_window_seconds=settings.dedupe_window_seconds,
-            confirm_frames=settings.confirm_frames,
-            confirm_window_frames=settings.confirm_window_frames,
-            vehicle_classifier=build_vehicle_classifier(settings),
-        )
-
+        vehicle_classifier = build_vehicle_classifier(settings)
         preview = Preview(client, settings.preview_interval_seconds)
 
         run_id = uuid.uuid4().hex[:12]
         run_id_var.set(run_id)
 
-        for uri in sources:
-            source_var.set(uri)
-            logger.info("Processing source", extra={"uri": uri})
-            for frame in build_source(uri, settings).frames():
-                if _stop.is_set():
-                    break
-                pipeline.process(frame)
-                preview.offer(uri, frame.image)
-                if once:
-                    break
-            if _stop.is_set() or once:
-                break
+        # One thread per camera: a live stream never ends, so reading sources
+        # in turn meant only the first camera was ever processed. Each camera
+        # has its own pipeline (confirmation, de-duplication, counters); the
+        # models, API client and preview are shared and thread-safe.
+        pipelines = {
+            uri: Pipeline(
+                detector,
+                reader,
+                client,
+                site_id=settings.site_id,
+                min_publish_confidence=settings.min_publish_confidence,
+                dedupe_window_seconds=settings.dedupe_window_seconds,
+                confirm_frames=settings.confirm_frames,
+                confirm_window_frames=settings.confirm_window_frames,
+                vehicle_classifier=vehicle_classifier,
+            )
+            for uri in sources
+        }
+        threads = [
+            # copy_context: each thread keeps the run id in its log lines.
+            threading.Thread(
+                target=contextvars.copy_context().run,
+                args=(_capture, uri, settings, pipeline, preview, once),
+                name=f"camera-{index}",
+                daemon=True,
+            )
+            for index, (uri, pipeline) in enumerate(pipelines.items())
+        ]
+        for thread in threads:
+            thread.start()
+        # Joined with a timeout so the main thread keeps handling SIGTERM.
+        while any(thread.is_alive() for thread in threads):
+            for thread in threads:
+                thread.join(timeout=0.5)
 
-        stats = pipeline.stats.as_dict()
+        stats: dict[str, int] = {}
+        for pipeline in pipelines.values():
+            for key, value in pipeline.stats.as_dict().items():
+                stats[key] = stats.get(key, 0) + value
         # Emitted as structured fields, not an interpolated string, so a log
         # aggregator can chart the accept/review/discard split over time.
         logger.info("Capture run finished", extra={"stats": stats, **stats})
@@ -139,6 +154,23 @@ def run(settings: VisionSettings, once: bool = False) -> int:
             _write_stats(settings.stats_path, run_id, stats)
 
     return 0
+
+
+def _capture(uri: str, settings: VisionSettings, pipeline: Pipeline, preview: Preview, once: bool) -> None:
+    """Read one camera until it ends or the service stops."""
+    source_var.set(uri)
+    logger.info("Processing source", extra={"uri": uri})
+    try:
+        for frame in build_source(uri, settings).frames():
+            if _stop.is_set():
+                break
+            pipeline.process(frame)
+            preview.offer(uri, frame.image)
+            if once:
+                break
+    except Exception:
+        # One failing camera must not take the others down with it.
+        logger.exception("Source failed", extra={"uri": uri})
 
 
 def _write_stats(path: str, run_id: str, stats: dict) -> None:
