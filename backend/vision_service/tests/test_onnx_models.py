@@ -115,3 +115,12 @@ class TestOwningVehicle:
         from app.detectors.vehicle_onnx import owning_vehicle
 
         assert owning_vehicle(BoundingBox(0, 0, 10, 5), [("car", 0.9, (500, 500, 900, 800))]) is None
+
+
+def test_onnx_runtime_telemetry_is_off():
+    """ORT reports to Microsoft by default; only this variable stops it."""
+    import os
+
+    import app  # noqa: F401 - setting it is the package's import side effect
+
+    assert os.environ["ORT_DISABLE_TELEMETRY"] == "1"
