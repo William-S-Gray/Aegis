@@ -1,3 +1,7 @@
+# Top-level dependencies. The images install requirements.lock, which pins
+# every transitive dependency with hashes; after changing a version here,
+# regenerate it (pip-tools):
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras -o requirements.lock requirements.txt
 # Runtime dependencies: everything the production image needs, nothing more.
 fastapi==0.115.14
 uvicorn[standard]==0.35.0
