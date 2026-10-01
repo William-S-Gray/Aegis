@@ -84,13 +84,15 @@ cd ../../frontend && npm install && npm run dev    # http://localhost:5173
 ## Tests
 
 ```bash
-cd backend/api_server     && .venv/bin/python -m pytest  # 238 (+21 with PostgreSQL and Redis)
-cd backend/vision_service && .venv/bin/python -m pytest  # 49
+cd backend/api_server     && .venv/bin/python -m pytest  # 247 (+21 with PostgreSQL and Redis)
+cd backend/vision_service && .venv/bin/python -m pytest  # 64
 cd frontend               && npm test                    # 82
 ```
 
 CI runs all of them plus lint, typecheck, build, a dependency audit, and a
 container build on every push — see `.github/workflows/ci.yml`.
+`scripts/ci-local.sh` runs the same checks on your machine (~20 minutes), for
+when GitHub Actions is unavailable.
 
 ## Security posture
 

@@ -17,7 +17,7 @@ permissions:
 jobs:
   api:
     name: API server
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     services:
       postgres:
@@ -96,7 +96,7 @@ jobs:
 
   observability:
     name: Observability smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend/api_server
@@ -139,7 +139,7 @@ jobs:
 
   monitoring:
     name: Monitoring config
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -180,7 +180,7 @@ jobs:
 
   vision:
     name: Vision service
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend/vision_service
@@ -203,7 +203,7 @@ jobs:
 
   frontend:
     name: Frontend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
@@ -225,7 +225,7 @@ jobs:
 
   audit:
     name: Dependency audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -242,7 +242,7 @@ jobs:
 
   images:
     name: Container images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [api, vision, frontend]
 
     strategy:
