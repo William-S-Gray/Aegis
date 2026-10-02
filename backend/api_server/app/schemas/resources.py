@@ -154,6 +154,29 @@ class VisitorSummary(BaseModel):
     valid_until: datetime
 
 
+class WatchlistCreate(BaseModel):
+    plate_number: PlateStr
+    # Shown to the guard on a hit: what to do depends on why it is watched.
+    reason: str = Field(min_length=1, max_length=200)
+
+
+class WatchlistPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    plate_number: str
+    plate_display: str
+    reason: str
+    created_at: datetime
+    removed_at: datetime | None = None
+
+
+class WatchlistSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    reason: str
+
+
 class VehicleUpdate(BaseModel):
     make: str | None = Field(default=None, max_length=80)
     model: str | None = Field(default=None, max_length=80)
@@ -273,6 +296,7 @@ class AlertPublic(BaseModel):
     detector_version: str | None = None
     has_crop: bool = False
     visitor_pass: VisitorSummary | None = None
+    watchlist_entry: WatchlistSummary | None = None
     # Review queue only: registered plates one character from this read.
     suggested_plates: list[str] = []
 

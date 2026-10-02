@@ -24,6 +24,7 @@ from app.models import (
     User,
     Vehicle,
     VisitorPass,
+    WatchlistEntry,
     normalize_plate,
 )
 from app.schemas import (
@@ -140,9 +141,22 @@ def classify_mismatch(db: Session, alert: Alert, vehicle: Vehicle | None) -> Mis
     """
     Decide why (or whether) a detection deserves attention.
 
+    A watched plate outranks everything, even a registered vehicle that
+    matches: a cloned or stolen plate on the right car is exactly that case.
     An unregistered plate outranks an attribute mismatch: it is the stronger
     signal and the one a guard must act on first.
     """
+    # Reclassified after a correction: links from the old reading must not linger.
+    alert.visitor_pass_id = None
+    entry = db.scalar(
+        select(WatchlistEntry)
+        .where(WatchlistEntry.plate_number == alert.plate_number, WatchlistEntry.removed_at.is_(None))
+        .limit(1)
+    )
+    alert.watchlist_entry_id = entry.id if entry else None
+    if entry:
+        return MismatchType.WATCHLIST
+
     if vehicle is None:
         visitor_pass = _valid_pass(db, alert.plate_number)
         alert.visitor_pass_id = visitor_pass.id if visitor_pass else None

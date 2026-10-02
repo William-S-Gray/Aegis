@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     # Days after a visitor pass ends. It names a visitor and is only needed
     # around the visit; the alerts it covered keep their own retention.
     retention_visitor_pass_days: int = 90
+    # Days after a watchlist entry is removed. Active entries are kept.
+    retention_watchlist_days: int = 365
 
     # ---- Observability --------------------------------------------------
     log_level: str = "INFO"

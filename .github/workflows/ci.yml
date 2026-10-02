@@ -149,6 +149,8 @@ jobs:
         run: |
           docker run --rm -v "$PWD/monitoring:/cfg:ro" \
             --entrypoint promtool prom/prometheus:v3.1.0 check rules /cfg/alerts.yml
+          docker run --rm -v "$PWD/monitoring:/cfg:ro" \
+            --entrypoint promtool prom/prometheus:v3.1.0 test rules /cfg/alerts.test.yml
           sed 's|\\development|ci|' monitoring/prometheus.yml > /tmp/prometheus.yml
           sed -i 's|/etc/prometheus/alerts.yml|/cfg/alerts.yml|' /tmp/prometheus.yml
           sed -i 's|/etc/prometheus/metrics-token|/cfg/.ci-metrics-token|' /tmp/prometheus.yml

@@ -64,6 +64,8 @@ step log-contract bash -c "cd $API && sed -n '/python - <<.PY./,/^          PY\$
 cd "$ROOT"
 step prometheus-rules docker run --rm -v "$ROOT/monitoring:/cfg:ro" --entrypoint promtool \
   prom/prometheus:v3.1.0 check rules /cfg/alerts.yml
+step prometheus-rule-tests docker run --rm -v "$ROOT/monitoring:/cfg:ro" --entrypoint promtool \
+  prom/prometheus:v3.1.0 test rules /cfg/alerts.test.yml
 step prometheus-config bash -c "sed 's|\\\\development|ci|; s|/etc/prometheus/alerts.yml|/cfg/alerts.yml|; \
   s|/etc/prometheus/metrics-token|/cfg/.ci-metrics-token|' monitoring/prometheus.yml > monitoring/.ci-prometheus.yml \
   && echo ci-token > monitoring/.ci-metrics-token \

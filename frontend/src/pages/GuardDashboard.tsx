@@ -14,7 +14,7 @@ import { apiMessage, asArray } from '../utils/safe';
 import { startOfflineSync } from '../services/OfflineSyncService';
 import {
   FiActivity, FiAlertTriangle, FiCheckCircle, FiXCircle,
-  FiCamera, FiUnlock, FiUserCheck
+  FiCamera, FiUnlock, FiUserCheck, FiAlertOctagon
 } from 'react-icons/fi';
 
 // Endpoints come from src/config.ts so deployments are environment-driven
@@ -30,7 +30,9 @@ interface Alert {
   registered_color?: string | null;
   plate_confidence?: number | null;
   type_confidence?: number | null;
-  mismatch_type: 'none' | 'type' | 'color' | 'unregistered' | 'visitor';
+  mismatch_type: 'none' | 'type' | 'color' | 'unregistered' | 'visitor' | 'watchlist';
+  /** Set when the plate is on the watchlist. */
+  watchlist_entry?: { reason: string } | null;
   /** Set when a visitor pass covers an otherwise unregistered plate. */
   visitor_pass?: { visitor_name: string; host_name?: string | null; valid_until: string } | null;
   status: 'open' | 'in_progress' | 'closed';
@@ -50,6 +52,7 @@ const MISMATCH_LABEL: Record<string, string> = {
   color: 'Colour mismatch',
   unregistered: 'Unregistered plate',
   visitor: 'Expected visitor',
+  watchlist: 'WATCHLIST',
 };
 
 const RECENT_LIMIT = 10;
@@ -252,6 +255,7 @@ const GuardDashboard: React.FC = () => {
     switch (mismatch) {
       case 'none': return 'green';
       case 'visitor': return 'blue';
+      case 'watchlist': return 'red';
       case 'unregistered': return 'red';
       default: return 'orange';
     }
@@ -261,6 +265,7 @@ const GuardDashboard: React.FC = () => {
     switch (mismatch) {
       case 'none': return FiCheckCircle;
       case 'visitor': return FiUserCheck;
+      case 'watchlist': return FiAlertOctagon;
       case 'unregistered': return FiXCircle;
       default: return FiAlertTriangle;
     }
@@ -405,6 +410,12 @@ const GuardDashboard: React.FC = () => {
                       </Text>
                     </Flex>
                     
+                    {alert.watchlist_entry && (
+                      <Text fontSize="sm" color="red.700" fontWeight="bold" mb={1}>
+                        Watchlist: {alert.watchlist_entry.reason}
+                      </Text>
+                    )}
+
                     {alert.visitor_pass && (
                       <Text fontSize="sm" color="blue.700" mb={1}>
                         Visitor: {alert.visitor_pass.visitor_name}
@@ -549,6 +560,17 @@ const GuardDashboard: React.FC = () => {
                   </HStack>
                 )}
 
+                {alert.watchlist_entry && (
+                  <Box p={3} bg="red.600" borderRadius="md">
+                    <Text color="white" fontWeight="bold">
+                      WATCHLIST: {alert.watchlist_entry.reason}
+                    </Text>
+                    <Text color="white" fontSize="sm">
+                      Follow the site procedure for this reason. Do not confront the driver alone.
+                    </Text>
+                  </Box>
+                )}
+
                 {alert.visitor_pass && (
                   <Box p={3} bg="blue.50" border="1px" borderColor="blue.200" borderRadius="md">
                     <Text color="blue.800" fontSize="sm">
@@ -559,7 +581,7 @@ const GuardDashboard: React.FC = () => {
                   </Box>
                 )}
 
-                {alert.mismatch_type !== 'none' && alert.mismatch_type !== 'visitor' && (
+                {!['none', 'visitor', 'watchlist'].includes(alert.mismatch_type) && (
                   <Box p={3} bg="red.50" border="1px" borderColor="red.200" borderRadius="md">
                     <Text color="red.800" fontSize="sm">
                       {MISMATCH_LABEL[alert.mismatch_type] ?? alert.mismatch_type}

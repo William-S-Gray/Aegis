@@ -13,6 +13,7 @@ from app.models.site import Site
 from app.models.user import RefreshToken, Role, User
 from app.models.vehicle import PLATE_MAX_LENGTH, Vehicle, normalize_plate
 from app.models.visitor_pass import VisitorPass
+from app.models.watchlist import WatchlistEntry
 
 __all__ = [
     "AccessAction",
@@ -32,5 +33,6 @@ __all__ = [
     "User",
     "Vehicle",
     "VisitorPass",
+    "WatchlistEntry",
     "normalize_plate",
 ]

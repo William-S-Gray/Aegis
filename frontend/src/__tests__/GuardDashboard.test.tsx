@@ -126,3 +126,20 @@ describe('GuardDashboard recent alerts', () => {
     expect(screen.getAllByText('EARLIER1')).toHaveLength(1);
   });
 });
+
+describe('GuardDashboard watchlist', () => {
+  it('puts the watchlist reason in front of the guard', async () => {
+    const socket = await renderConnected();
+    const hit = alertFor('w1', 'ABC1234');
+
+    act(() =>
+      socket.push({
+        ...hit,
+        alert: { ...hit.alert, mismatch_type: 'watchlist', watchlist_entry: { reason: 'Reported stolen 30 Sep' } },
+      })
+    );
+
+    expect(await screen.findByText(/New Alert - ABC1234/)).toBeInTheDocument();
+    expect(screen.getByText('WATCHLIST: Reported stolen 30 Sep')).toBeInTheDocument();
+  });
+});
