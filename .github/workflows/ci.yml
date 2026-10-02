@@ -57,6 +57,10 @@ jobs:
             backend/api_server/requirements.txt
             backend/api_server/requirements-dev.txt
 
+      # Self-hosted: a fresh environment per job (RUNNER_TEMP is wiped after
+      # each), so packages left by an earlier job can't hide a missing one.
+      - if: vars.CI_RUNNER == 'self-hosted'
+        run: python -m venv "$RUNNER_TEMP/venv" && echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
       - run: pip install -r requirements-dev.txt
 
       - name: Tests (SQLite, in-memory store)
@@ -115,6 +119,10 @@ jobs:
           # No upload of a self-hosted machine's own pip cache; its disk persists anyway.
           cache: ${{ vars.CI_RUNNER != 'self-hosted' && 'pip' || '' }}
           cache-dependency-path: backend/api_server/requirements.txt
+      # Self-hosted: a fresh environment per job (RUNNER_TEMP is wiped after
+      # each), so packages left by an earlier job can't hide a missing one.
+      - if: vars.CI_RUNNER == 'self-hosted'
+        run: python -m venv "$RUNNER_TEMP/venv" && echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
       - run: pip install -r requirements.txt
 
       # Guards the log contract: a malformed line breaks ingestion silently,
@@ -212,6 +220,10 @@ jobs:
 
       # Without the ML extras: the pipeline runs on the stub and the model
       # adapters on fakes. Model accuracy is measured with app.evaluate.
+      # Self-hosted: a fresh environment per job (RUNNER_TEMP is wiped after
+      # each), so packages left by an earlier job can't hide a missing one.
+      - if: vars.CI_RUNNER == 'self-hosted'
+        run: python -m venv "$RUNNER_TEMP/venv" && echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
 
