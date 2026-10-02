@@ -429,6 +429,17 @@ class TestCameraPreview:
             headers={**headers, "content-type": "image/jpeg"},
         )
 
+    def test_each_camera_reports_how_long_since_its_last_frame(self, client, auth):
+        """Feeds the AegisCameraOffline alert; one series per camera id."""
+        service, _ = auth(Role.SERVICE)
+        self._publish(client, service)
+
+        body = client.get("/metrics").text
+
+        line = next(l for l in body.splitlines() if l.startswith("aegis_camera_seconds_since_frame{"))
+        assert line.startswith('aegis_camera_seconds_since_frame{camera="main-gate"} ')
+        assert 0 <= float(line.split()[-1]) < 5
+
     def test_guard_sees_the_latest_frame_the_service_published(self, client, auth, db):
         service, _ = auth(Role.SERVICE)
         guard, _ = auth(Role.GUARD)

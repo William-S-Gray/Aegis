@@ -16,10 +16,11 @@ from dataclasses import dataclass
 from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from prometheus_client.core import GaugeMetricFamily
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core import audit
+from app.core import audit, metrics
 from app.core.deps import require_frame_publisher, require_guard
 from app.core.state import shared_store
 from app.database import get_db
@@ -71,6 +72,28 @@ class CameraFrames:
 
 
 camera_frames = CameraFrames()
+
+
+class _CameraAgeCollector:
+    """
+    Seconds since each camera's last frame, read at scrape time, for the
+    camera-offline alerts. Labelled by camera id (host and path, never
+    credentials); at most MAX_CAMERAS series.
+    """
+
+    def collect(self):
+        family = GaugeMetricFamily(
+            "aegis_camera_seconds_since_frame",
+            "Seconds since the camera last sent a frame.",
+            labels=["camera"],
+        )
+        now = time.monotonic()
+        for camera_id, frame in camera_frames.all().items():
+            family.add_metric([camera_id], now - frame.received_mono)
+        yield family
+
+
+metrics.registry.register(_CameraAgeCollector())
 
 
 def _is_online(frame: _Frame) -> bool:
