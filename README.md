@@ -63,6 +63,17 @@ docker compose exec api python -m app.cli create-user \
 
 Frontend on <http://localhost:8080>, API on <http://localhost:8081>.
 
+**Upgrading:** after pulling new code, rebuild everything including the
+migration runner, which has its own image, then migrate:
+
+```bash
+docker compose up -d --build
+docker compose --profile tools run --rm --build migrate
+```
+
+Rebuilding only `api` leaves the migration image on the old code, so new
+tables are silently not created.
+
 The frontend image reads its API URL at container start rather than at build
 time, so one image promotes unchanged from staging to production.
 

@@ -65,6 +65,8 @@ class MismatchType(str, enum.Enum):
     TYPE = "type"
     COLOR = "color"
     UNREGISTERED = "unregistered"
+    # Not in the register, but a valid visitor pass covers it.
+    VISITOR = "visitor"
 
 
 class Alert(Base):
@@ -106,6 +108,10 @@ class Alert(Base):
     site_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("sites.id", ondelete="SET NULL"), index=True
     )
+    # The pass that covered an otherwise unregistered plate.
+    visitor_pass_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("visitor_passes.id", ondelete="SET NULL"), index=True
+    )
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
@@ -143,6 +149,8 @@ class Alert(Base):
     )
     # Set when the alert reaches a terminal state; drives time-to-resolution.
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    visitor_pass = relationship("VisitorPass", lazy="joined")
 
     comments: Mapped[list["AlertComment"]] = relationship(
         back_populates="alert",

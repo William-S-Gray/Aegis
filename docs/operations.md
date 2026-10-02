@@ -135,6 +135,24 @@ the plate — writing it there would recreate the data just removed.
 > SLA, or document a re-erasure step after any restore. Agree which with the
 > customer's DPO.
 
+## Visitor passes
+
+Residents add expected visitors in the user portal (**My visitors**): plate,
+name, a time window of at most 30 days, and an optional note for the guard.
+Guards and administrators can issue passes for any host through the API. A
+camera read of the plate inside the window shows the guard **Expected visitor**
+with the name, host and end time, in place of "Unregistered plate". The guard
+still decides: a pass is never grounds for opening the barrier on its own.
+
+A pass names a visitor, so it is personal data:
+
+- **Who can see it:** residents see and cancel only the passes they host.
+- **Audit:** creating, listing and cancelling passes are audited.
+- **Subject rights:** export and erasure by plate include passes; erasure
+  removes the visitor's name and notes as well as the plate.
+- **Retention:** passes are deleted `RETENTION_VISITOR_PASS_DAYS` (90) days
+  after they end. The alerts they covered keep their own retention.
+
 ## Monitoring
 
 ```bash

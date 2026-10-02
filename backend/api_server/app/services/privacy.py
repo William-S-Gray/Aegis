@@ -17,6 +17,7 @@ from app.models import (
     AuditLog,
     User,
     Vehicle,
+    VisitorPass,
     normalize_plate,
 )
 
@@ -114,6 +115,7 @@ def export_by_plate(db: Session, plate: str) -> dict[str, Any]:
     logs = list(
         db.scalars(select(AccessLog).where(AccessLog.plate_number == normalized)).all()
     )
+    passes = list(db.scalars(select(VisitorPass).where(VisitorPass.plate_number == normalized)).unique())
 
     alert_ids = [str(a.id) for a in alerts]
     # SQL narrows by substring; the token match then drops rows that only
@@ -130,10 +132,12 @@ def export_by_plate(db: Session, plate: str) -> dict[str, Any]:
         "vehicle": _serialize_vehicle(vehicle) if vehicle else None,
         "alerts": [_serialize_alert(a) for a in alerts],
         "access_logs": [_serialize_access_log(entry) for entry in logs],
+        "visitor_passes": [_serialize_pass(p) for p in passes],
         "audit_entries": [_serialize_audit(entry) for entry in audit_rows],
         "counts": {
             "alerts": len(alerts),
             "access_logs": len(logs),
+            "visitor_passes": len(passes),
             "audit_entries": len(audit_rows),
         },
     }
@@ -165,6 +169,7 @@ def erase_by_plate(
         "access_logs": 0,
         "audit_entries": 0,
         "comments": 0,
+        "visitor_passes": 0,
     }
 
     vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == normalized))
@@ -203,6 +208,14 @@ def erase_by_plate(
         # rather than attempt to scrub an unknown shape.
         entry.details = {"erased": True}
         counts["access_logs"] += 1
+
+    # A pass names the visitor as well as the plate: both go.
+    for visitor_pass in db.scalars(select(VisitorPass).where(VisitorPass.plate_number == normalized)).unique():
+        visitor_pass.plate_number = tombstone
+        visitor_pass.plate_display = tombstone
+        visitor_pass.visitor_name = "erased"
+        visitor_pass.notes = None
+        counts["visitor_passes"] += 1
 
     # Streamed rather than materialised: this table is audited on every read and
     # is the fastest-growing one in the schema.
@@ -245,6 +258,19 @@ def _scrub(value: Any, pattern: re.Pattern[str], replacement: str) -> Any:
     if isinstance(value, list):
         return [_scrub(item, pattern, replacement) for item in value]
     return value
+
+
+def _serialize_pass(visitor_pass: VisitorPass) -> dict[str, Any]:
+    return {
+        "id": str(visitor_pass.id),
+        "plate_number": visitor_pass.plate_number,
+        "visitor_name": visitor_pass.visitor_name,
+        "notes": visitor_pass.notes,
+        "valid_from": visitor_pass.valid_from.isoformat(),
+        "valid_until": visitor_pass.valid_until.isoformat(),
+        "revoked_at": visitor_pass.revoked_at.isoformat() if visitor_pass.revoked_at else None,
+        "host_id": str(visitor_pass.host_id) if visitor_pass.host_id else None,
+    }
 
 
 def _serialize_vehicle(vehicle: Vehicle) -> dict[str, Any]:

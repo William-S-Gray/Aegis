@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import get_settings
 from app.models import (
@@ -100,6 +100,58 @@ class VehicleCreate(BaseModel):
     vehicle_type: str | None = Field(default=None, max_length=40)
     owner_id: uuid.UUID | None = None
     site_id: uuid.UUID | None = None
+
+
+# Longest a single pass may run. A standing arrangement belongs in the register.
+VISITOR_PASS_MAX_DAYS = 30
+
+
+class VisitorPassCreate(BaseModel):
+    plate_number: PlateStr
+    visitor_name: str = Field(min_length=1, max_length=200)
+    valid_from: datetime
+    valid_until: datetime
+    notes: str | None = Field(default=None, max_length=500)
+    # Guards and administrators only; a resident always hosts their own passes.
+    host_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _window(self) -> "VisitorPassCreate":
+        if self.valid_from.tzinfo is None or self.valid_until.tzinfo is None:
+            raise ValueError("valid_from and valid_until must include a timezone")
+        if self.valid_until <= self.valid_from:
+            raise ValueError("valid_until must be after valid_from")
+        if self.valid_until <= datetime.now(timezone.utc):
+            raise ValueError("valid_until is already in the past")
+        if self.valid_until - self.valid_from > timedelta(days=VISITOR_PASS_MAX_DAYS):
+            raise ValueError(f"A pass may run at most {VISITOR_PASS_MAX_DAYS} days; register the vehicle instead")
+        return self
+
+
+class VisitorPassPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    plate_number: str
+    plate_display: str
+    visitor_name: str
+    notes: str | None = None
+    valid_from: datetime
+    valid_until: datetime
+    revoked_at: datetime | None = None
+    host_id: uuid.UUID | None = None
+    host_name: str | None = None
+    created_at: datetime
+
+
+class VisitorSummary(BaseModel):
+    """What a guard needs on an alert: who, for whom, until when."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    visitor_name: str
+    host_name: str | None = None
+    valid_until: datetime
 
 
 class VehicleUpdate(BaseModel):
@@ -220,6 +272,7 @@ class AlertPublic(BaseModel):
     detector_name: str | None = None
     detector_version: str | None = None
     has_crop: bool = False
+    visitor_pass: VisitorSummary | None = None
     # Review queue only: registered plates one character from this read.
     suggested_plates: list[str] = []
 

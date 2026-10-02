@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import AccessLog, Alert, AuditLog, RefreshToken
+from app.models import AccessLog, Alert, AuditLog, RefreshToken, VisitorPass
 
 logger = logging.getLogger("aegis.retention")
 settings = get_settings()
@@ -61,6 +61,12 @@ def _policies(now: datetime) -> list[tuple[str, type, object, datetime]]:
             RefreshToken,
             RefreshToken.expires_at,
             _cutoff(settings.retention_refresh_token_days, now),
+        ),
+        (
+            "visitor_passes",
+            VisitorPass,
+            VisitorPass.valid_until,
+            _cutoff(settings.retention_visitor_pass_days, now),
         ),
         (
             "access_logs",
