@@ -251,6 +251,8 @@ class Pipeline:
             "detector_name": observation.detector_name,
             "detector_version": observation.detector_version,
             "plate_crop_jpeg": encode_crop(observation.crop),
+            # The API sends small plates to review: the reader is least reliable there.
+            "plate_width_px": observation.detection.box.width,
         }
 
     # ----------------------------------------------------------- publish

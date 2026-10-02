@@ -48,7 +48,7 @@ class VisionSettings(BaseSettings):
 
     # ---- Capture --------------------------------------------------------
     sources: str = ""
-    frame_interval_seconds: float = 0.5
+    frame_interval_seconds: float = 0.25
     # How often each camera's live preview is pushed to the guard console;
     # 0 turns previews off.
     preview_interval_seconds: float = 1.0
@@ -58,7 +58,7 @@ class VisionSettings(BaseSettings):
 
     # A live read is published once the same plate is read in this many of the
     # camera's last `confirm_window_frames` frames; 1 turns this off. At the
-    # default frame interval that is about 1.5 s of the vehicle in view.
+    # default frame interval that is under a second of the vehicle in view.
     confirm_frames: int = 3
     confirm_window_frames: int = 5
 

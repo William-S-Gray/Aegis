@@ -192,6 +192,7 @@ class TestGating:
             "detector_version": "1.0",
             # Test frames are bytes, not image arrays, so there is no crop.
             "plate_crop_jpeg": None,
+            "plate_width_px": 10,
         }
 
 

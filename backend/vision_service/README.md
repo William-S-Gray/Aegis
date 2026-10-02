@@ -149,6 +149,31 @@ on only about 7 of 20 vehicles, because shadows, glass and background skew it. I
 false colour mismatches. It needs a classifier trained on your own footage;
 the plates guards confirm in the review queue are the start of that set.
 
+## Measured on video
+
+13 licensed clips (Pexels) were scored against **56 plates a person could read in
+them**, hand-labelled before looking at the system's output. The clips cover car-park
+exits, cars approaching, night, rain, dash-cam traffic, and Hong Kong, UK, Turkish,
+German, Dutch and North American plates.
+
+| Settings | Correct plates published | **Wrong plate auto-accepted** |
+|---|---|---|
+| 0.5 s interval, no size rule | 24 / 56 | **4** |
+| **0.25 s interval + 120 px rule (defaults)** | **33 / 56** (25 auto, 8 to review) | **1** |
+| 0.25 s, 2-of-4 confirmation | 40 / 56 | **3** |
+
+- **Gate-like clips** (a car leaving a car park, cars approaching, parked cars) read
+  every plate: 9 of 9.
+- **Misses** were mostly plates seen for under a second from a moving dash-cam,
+  which is not how a gate camera sees traffic.
+- **Small-plate rule:** the reader can drop a character from a small plate and stay
+  confident, the same way on every frame (`34VY880` for `34VY8802`, `EW119` for
+  `EW1119`), so confirmation cannot catch it. Plates narrower than the API's
+  `plate_auto_accept_min_width` (120 px) therefore go to review with reason
+  `small_plate`. Mount cameras so plates are well over 120 px wide.
+- **Remaining error:** the one wrong auto-accept was an out-of-focus plate in the
+  background (`WCC699` for `MCC699`).
+
 ## Confirmation across frames
 
 One blurred frame can misread a plate with high confidence. In a webcam test,
@@ -157,8 +182,8 @@ a plate read correctly in 142 frames was read once as a different plate at
 dominates across frames, and a misread doesn't repeat. So a live camera's read
 is published only once the same plate appears in `VISION_CONFIRM_FRAMES` (3)
 of that camera's last `VISION_CONFIRM_WINDOW_FRAMES` (5) frames. At the
-default `VISION_FRAME_INTERVAL_SECONDS` of 0.5, a vehicle must be in view for
-about 1.5 s. Reads that never confirm are counted as `unconfirmed`. Still
+default `VISION_FRAME_INTERVAL_SECONDS` of 0.25, a vehicle must be in view for
+under a second. Reads that never confirm are counted as `unconfirmed`. Still
 images (a directory source, `app.evaluate`) are not confirmed, because each is
 its own picture.
 
@@ -167,8 +192,8 @@ its own picture.
 List them all in `VISION_SOURCES`. Each camera runs in its own thread with
 its own confirmation and de-duplication, sharing the models and API
 connection. A camera that fails is logged, and the others keep running. On a
-laptop CPU, one camera at the default 0.5 s interval uses about a third of a
-core. Add CPU, or raise `VISION_FRAME_INTERVAL_SECONDS`, as cameras are added.
+laptop CPU, one camera at the default 0.25 s interval uses about two thirds of
+a core. Add CPU, or raise `VISION_FRAME_INTERVAL_SECONDS`, as cameras are added.
 
 Video files are paced by their own timestamps, so replaying recorded footage
 analyses it at the configured interval rather than skipping most of it.

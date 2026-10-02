@@ -158,6 +158,8 @@ def _review_decision(payload: AlertCreate) -> tuple[bool, ReviewReason | None]:
         return False, None
     if confidence < settings.plate_auto_accept_confidence:
         return True, ReviewReason.LOW_PLATE_CONFIDENCE
+    if payload.plate_width_px is not None and payload.plate_width_px < settings.plate_auto_accept_min_width:
+        return True, ReviewReason.SMALL_PLATE
     if (
         payload.type_confidence is not None
         and payload.type_confidence < settings.type_review_confidence

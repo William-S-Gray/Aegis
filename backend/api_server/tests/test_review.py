@@ -71,6 +71,25 @@ class TestConfidenceGating:
         assert body["requires_review"] is True
         assert body["review_reason"] == "low_type_confidence"
 
+    def test_a_small_plate_goes_to_review_however_confident(self, client, auth):
+        """Measured on video: the reader drops a character from small plates
+        (34VY880 for 34VY8802) at confidence 1.0, the same way every frame."""
+        headers = auth()
+        body = raise_alert(
+            client, headers, plate_number="SMALL1", plate_confidence=1.0, plate_width_px=80
+        ).json()
+
+        assert body["requires_review"] is True
+        assert body["review_reason"] == "small_plate"
+
+    def test_a_plate_at_the_minimum_width_is_accepted(self, client, auth):
+        headers = auth()
+        body = raise_alert(
+            client, headers, plate_number="WIDE01", plate_confidence=1.0, plate_width_px=120
+        ).json()
+
+        assert body["requires_review"] is False
+
     def test_manual_entry_never_requires_review(self, client, auth):
         """A guard typing a plate has already vouched for it."""
         headers = auth()
