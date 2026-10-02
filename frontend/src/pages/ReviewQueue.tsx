@@ -18,7 +18,7 @@ import { FiCheckCircle, FiRefreshCw } from 'react-icons/fi';
 import api from '../api';
 import { apiMessage, asArray } from '../utils/safe';
 
-type ReviewReason = 'low_plate_confidence' | 'low_type_confidence' | 'ambiguous_plate' | 'small_plate';
+type ReviewReason = 'low_plate_confidence' | 'low_type_confidence' | 'ambiguous_plate' | 'small_plate' | 'unexpected_format';
 
 interface ReviewAlert {
   id: string;
@@ -34,6 +34,7 @@ interface ReviewAlert {
   detector_name?: string | null;
   detector_version?: string | null;
   has_crop?: boolean;
+  suggested_plates?: string[];
   timestamp: string;
 }
 
@@ -42,6 +43,7 @@ const REASON_LABEL: Record<string, string> = {
   low_type_confidence: 'Vehicle type was uncertain',
   ambiguous_plate: 'Plate was ambiguous',
   small_plate: 'Plate was small in the image',
+  unexpected_format: "Plate doesn't match the expected format",
 };
 
 const toPercent = (value?: number | null) =>
@@ -302,6 +304,25 @@ const ReviewQueue: React.FC = () => {
               >
                 Confirm
               </Button>
+              {asArray<string>(alert.suggested_plates).length > 0 && (
+                <HStack spacing={2}>
+                  <Text fontSize="sm" color="gray.600">
+                    Did you mean:
+                  </Text>
+                  {asArray<string>(alert.suggested_plates).map((plate) => (
+                    // Fills the box only: the guard still checks the image and confirms.
+                    <Button
+                      key={plate}
+                      size="xs"
+                      variant="outline"
+                      fontFamily="mono"
+                      onClick={() => setDrafts((prev) => ({ ...prev, [alert.id]: plate }))}
+                    >
+                      {plate}
+                    </Button>
+                  ))}
+                </HStack>
+              )}
               {Boolean(drafts[alert.id]) && drafts[alert.id] !== alert.plate_number && (
                 <Text fontSize="xs" color="orange.600">
                   This will be recorded as a correction.

@@ -1,7 +1,9 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+import re
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,6 +77,24 @@ class Settings(BaseSettings):
     # At 120 px, wrong auto-accepts fell from 4 to 1 and no correct read was lost
     # (8 went to review instead). 0 turns it off.
     plate_auto_accept_min_width: int = 120
+    # Comma-separated regular expressions for the plate formats expected at this
+    # site, e.g. "[A-Z]{3}[0-9]{4}" for standard Zimbabwe plates. A machine read
+    # that matches none goes to review: a dropped or extra character usually
+    # breaks the format, and the reader stays confident when it happens. Add the
+    # formats of foreign, diplomatic or government plates the site sees. Empty
+    # turns the check off.
+    plate_formats: str = ""
+
+    @field_validator("plate_formats")
+    @classmethod
+    def _formats_compile(cls, value: str) -> str:
+        # A typo here would otherwise fail every alert at request time.
+        for pattern in (p.strip() for p in value.split(",") if p.strip()):
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(f"PLATE_FORMATS has an invalid pattern {pattern!r}: {exc}") from None
+        return value
 
     # Login throttling
     login_max_attempts: int = 5

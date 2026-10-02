@@ -1,5 +1,6 @@
 import base64
 import math
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -142,6 +143,12 @@ def classify_mismatch(db: Session, alert: Alert, vehicle: Vehicle | None) -> Mis
     return MismatchType.NONE
 
 
+def _matches_expected_format(plate: str) -> bool:
+    """True when no formats are configured, or the plate matches one of them."""
+    patterns = [p.strip() for p in settings.plate_formats.split(",") if p.strip()]
+    return not patterns or any(re.fullmatch(p, plate) for p in patterns)
+
+
 def _review_decision(payload: AlertCreate) -> tuple[bool, ReviewReason | None]:
     """
     Decide whether a machine read is trustworthy enough to stand on its own.
@@ -160,12 +167,44 @@ def _review_decision(payload: AlertCreate) -> tuple[bool, ReviewReason | None]:
         return True, ReviewReason.LOW_PLATE_CONFIDENCE
     if payload.plate_width_px is not None and payload.plate_width_px < settings.plate_auto_accept_min_width:
         return True, ReviewReason.SMALL_PLATE
+    if not _matches_expected_format(payload.plate_number):
+        return True, ReviewReason.UNEXPECTED_FORMAT
     if (
         payload.type_confidence is not None
         and payload.type_confidence < settings.type_review_confidence
     ):
         return True, ReviewReason.LOW_TYPE_CONFIDENCE
     return False, None
+
+
+def _one_edit_apart(a: str, b: str) -> bool:
+    """True when b is a with one character changed, missing or added."""
+    if a == b or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    short, long = (a, b) if len(a) < len(b) else (b, a)
+    return any(long[:i] + long[i + 1:] == short for i in range(len(long)))
+
+
+def _suggest_plates(db: Session, alerts: list[Alert]) -> None:
+    """
+    For each read not in the register, the registered plates one character
+    away, so a guard can correct a misread with a click rather than retyping.
+    Guards can already list the whole register, so this exposes nothing new.
+    """
+    pending = [a for a in alerts if a.mismatch_type == MismatchType.UNREGISTERED]
+    registered = (
+        list(db.scalars(select(Vehicle.plate_number).where(Vehicle.is_active.is_(True))))
+        if pending
+        else []
+    )
+    for alert in alerts:
+        alert.suggested_plates = (
+            sorted(p for p in registered if _one_edit_apart(alert.plate_number, p))[:3]
+            if alert in pending
+            else []
+        )
 
 
 @router.get("/review-queue", response_model=list[AlertPublic])
@@ -185,6 +224,8 @@ def review_queue(
             .limit(limit)
         ).all()
     )
+
+    _suggest_plates(db, alerts)
 
     # Reconcile the gauge with the database. Counted, not len(alerts): the page
     # is capped by `limit`, and a gauge that cannot exceed the page size never

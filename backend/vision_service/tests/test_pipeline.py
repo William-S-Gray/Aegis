@@ -259,7 +259,8 @@ class TestConfirmation:
         client, pipeline = self.stream(["ABH2411", "ABH241", "ABH2411", "ABH2411", "ABH2411"])
 
         assert [c["plate_number"] for c in client.calls] == ["ABH2411"]
-        assert pipeline.stats.unconfirmed == 3  # two early ABH2411s, one ABH241
+        # Published on the third read: the truncated ABH241 supports ABH2411.
+        assert pipeline.stats.unconfirmed == 2
 
     def test_confirmation_tolerates_a_missed_frame(self):
         client, _ = self.stream(["AB12CD", None, "AB12CD", "AB12CD"])

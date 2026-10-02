@@ -159,8 +159,9 @@ German, Dutch and North American plates.
 | Settings | Correct plates published | **Wrong plate auto-accepted** |
 |---|---|---|
 | 0.5 s interval, no size rule | 24 / 56 | **4** |
-| **0.25 s interval + 120 px rule (defaults)** | **33 / 56** (25 auto, 8 to review) | **1** |
+| 0.25 s interval + 120 px rule | **33 / 56** (25 auto, 8 to review) | **1** |
 | 0.25 s, 2-of-4 confirmation | 40 / 56 | **3** |
+| **0.25 s + 120 px + tracking (defaults)** | **30 / 56** (22 auto, 8 to review) | **0** |
 
 - **Gate-like clips** (a car leaving a car park, cars approaching, parked cars) read
   every plate: 9 of 9.
@@ -171,21 +172,32 @@ German, Dutch and North American plates.
   `EW1119`), so confirmation cannot catch it. Plates narrower than the API's
   `plate_auto_accept_min_width` (120 px) therefore go to review with reason
   `small_plate`. Mount cameras so plates are well over 120 px wide.
-- **Remaining error:** the one wrong auto-accept was an out-of-focus plate in the
-  background (`WCC699` for `MCC699`).
+- **Tracking** removed the last wrong auto-accept: an out-of-focus `MCC699`
+  misread as `WCC699` in some frames was outvoted by its correct reads. It
+  cost 3 correct reads, which is the right trade for a gate.
 
 ## Confirmation across frames
 
-One blurred frame can misread a plate with high confidence. In a webcam test,
-a plate read correctly in 142 frames was read once as a different plate at
-0.92, which the gate alone would have auto-accepted. The true reading
-dominates across frames, and a misread doesn't repeat. So a live camera's read
-is published only once the same plate appears in `VISION_CONFIRM_FRAMES` (3)
-of that camera's last `VISION_CONFIRM_WINDOW_FRAMES` (5) frames. At the
-default `VISION_FRAME_INTERVAL_SECONDS` of 0.25, a vehicle must be in view for
-under a second. Reads that never confirm are counted as `unconfirmed`. Still
-images (a directory source, `app.evaluate`) are not confirmed, because each is
-its own picture.
+One blurred frame can misread a plate with high confidence. In a webcam test, a
+plate read correctly in 142 frames was read once as a different plate at 0.92,
+which the gate alone would have auto-accepted. So a live camera's plate is
+**followed across frames by its position** (`app/tracking.py`), and published
+once its track has `VISION_CONFIRM_FRAMES` (3) readable frames, with the
+reading most of them agree on:
+
+- **A single misread never wins.** The winning reading must come from at least
+  two frames.
+- **A truncated read supports the full one.** The reader sometimes drops a
+  character (`34AIE79` for `34AIE791`), so a read that is the winner minus
+  one character counts towards it, not against it.
+- **A track publishes once.** Later reads of the same vehicle, including variant
+  reads, are not new alerts. A plate unseen for more than
+  `VISION_TRACK_MAX_GAP_FRAMES` (3) frames is a new vehicle.
+
+At the default `VISION_FRAME_INTERVAL_SECONDS` of 0.25, a vehicle must be in
+view for under a second. Reads that never confirm are counted as
+`unconfirmed`. Still images (a directory source, `app.evaluate`) are not
+confirmed, because each is its own picture.
 
 ## Several cameras
 
