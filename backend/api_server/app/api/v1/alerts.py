@@ -323,7 +323,7 @@ def confirm_plate(
     """
     # Locked so two reviewers cannot both confirm the same read; the second
     # waits, then sees it is no longer pending.
-    alert = db.scalar(select(Alert).where(Alert.id == alert_id).with_for_update())
+    alert = db.scalar(select(Alert).where(Alert.id == alert_id).with_for_update(of=Alert))
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     if not alert.requires_review or alert.reviewed_at is not None:
