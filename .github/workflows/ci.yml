@@ -17,7 +17,9 @@ permissions:
 jobs:
   api:
     name: API server
-    runs-on: ubuntu-24.04
+    # vars.CI_RUNNER=self-hosted runs CI on the project's own machine (no
+    # Actions minutes); unset, it uses GitHub's hosted runner.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
 
     services:
       postgres:
@@ -26,14 +28,15 @@ jobs:
           POSTGRES_USER: aegis
           POSTGRES_PASSWORD: aegis
           POSTGRES_DB: aegis_test
-        ports: ["5432:5432"]
+        # Not 5432/6379: a self-hosted machine often runs its own.
+        ports: ["55432:5432"]
         options: >-
           --health-cmd "pg_isready -U aegis -d aegis_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
 
       redis:
         image: redis:7-alpine
-        ports: ["6379:6379"]
+        ports: ["56379:6379"]
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 10
@@ -62,9 +65,9 @@ jobs:
       # locks and JSONB, so a bug in any of those only shows up here.
       - name: Tests (PostgreSQL, Redis-backed store)
         env:
-          TEST_DATABASE_URL: postgresql+psycopg://aegis:aegis@localhost:5432/aegis_test
-          REDIS_URL: redis://localhost:6379/1
-          TEST_REDIS_URL: redis://localhost:6379/0
+          TEST_DATABASE_URL: postgresql+psycopg://aegis:aegis@localhost:55432/aegis_test
+          REDIS_URL: redis://localhost:56379/1
+          TEST_REDIS_URL: redis://localhost:56379/0
         run: python -m pytest -q
 
       # A backup nobody has restored is not a backup. This proves the dump
@@ -72,20 +75,20 @@ jobs:
       - name: Backup restores cleanly
         env:
           PGPASSWORD: aegis
-          DATABASE_URL: postgresql+psycopg://aegis:aegis@localhost:5432/aegis_test
+          DATABASE_URL: postgresql+psycopg://aegis:aegis@localhost:55432/aegis_test
           SECRET_KEY: ci-only-not-a-real-secret
         run: |
           alembic upgrade head
           AEGIS_PASSWORD=ci-only-password-long python -m app.cli create-user \
             --email ci@aegis.example --name CI --role admin
           ../../scripts/backup.sh ./ci-backups
-          VERIFY_ADMIN_URL=postgresql://aegis:aegis@localhost:5432/postgres \
+          VERIFY_ADMIN_URL=postgresql://aegis:aegis@localhost:55432/postgres \
             ../../scripts/verify-backup.sh ./ci-backups/*.dump
 
       # Catches a model change that was never captured in a migration.
       - name: Migrations apply cleanly and match the models
         env:
-          DATABASE_URL: postgresql+psycopg://aegis:aegis@localhost:5432/aegis_test
+          DATABASE_URL: postgresql+psycopg://aegis:aegis@localhost:55432/aegis_test
           SECRET_KEY: ci-only-not-a-real-secret
         run: |
           alembic upgrade head
@@ -96,7 +99,9 @@ jobs:
 
   observability:
     name: Observability smoke
-    runs-on: ubuntu-24.04
+    # vars.CI_RUNNER=self-hosted runs CI on the project's own machine (no
+    # Actions minutes); unset, it uses GitHub's hosted runner.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     defaults:
       run:
         working-directory: backend/api_server
@@ -139,7 +144,9 @@ jobs:
 
   monitoring:
     name: Monitoring config
-    runs-on: ubuntu-24.04
+    # vars.CI_RUNNER=self-hosted runs CI on the project's own machine (no
+    # Actions minutes); unset, it uses GitHub's hosted runner.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -182,7 +189,9 @@ jobs:
 
   vision:
     name: Vision service
-    runs-on: ubuntu-24.04
+    # vars.CI_RUNNER=self-hosted runs CI on the project's own machine (no
+    # Actions minutes); unset, it uses GitHub's hosted runner.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     defaults:
       run:
         working-directory: backend/vision_service
@@ -205,7 +214,9 @@ jobs:
 
   frontend:
     name: Frontend
-    runs-on: ubuntu-24.04
+    # vars.CI_RUNNER=self-hosted runs CI on the project's own machine (no
+    # Actions minutes); unset, it uses GitHub's hosted runner.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     defaults:
       run:
         working-directory: frontend
@@ -227,7 +238,9 @@ jobs:
 
   audit:
     name: Dependency audit
-    runs-on: ubuntu-24.04
+    # vars.CI_RUNNER=self-hosted runs CI on the project's own machine (no
+    # Actions minutes); unset, it uses GitHub's hosted runner.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -244,7 +257,9 @@ jobs:
 
   images:
     name: Container images
-    runs-on: ubuntu-24.04
+    # vars.CI_RUNNER=self-hosted runs CI on the project's own machine (no
+    # Actions minutes); unset, it uses GitHub's hosted runner.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     needs: [api, vision, frontend]
 
     strategy:

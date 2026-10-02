@@ -103,7 +103,9 @@ cd frontend               && npm test                    # 82
 CI runs all of them plus lint, typecheck, build, a dependency audit, and a
 container build on every push — see `.github/workflows/ci.yml`.
 `scripts/ci-local.sh` runs the same checks on your machine (~20 minutes), for
-when GitHub Actions is unavailable.
+when GitHub Actions is unavailable. Setting the repository variable
+`CI_RUNNER=self-hosted` runs CI on a self-hosted runner instead of GitHub's,
+which uses no Actions minutes; see [docs/operations.md](docs/operations.md#ci-on-a-self-hosted-runner).
 
 ## Security posture
 

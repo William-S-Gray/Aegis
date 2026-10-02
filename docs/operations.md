@@ -270,3 +270,25 @@ Worth alerting on:
 
 That last one is the quiet failure: everything looks healthy while nobody is
 actually being notified.
+
+## CI on a self-hosted runner
+
+GitHub charges Actions minutes for its hosted runners on private repositories,
+not for runners you host. CI can run on the project's own machine instead:
+
+1. Install GitHub's runner (Settings → Actions → Runners → New self-hosted
+   runner) on a Linux machine with Docker and the PostgreSQL client tools, and
+   register it to this repository only.
+2. Run it as a service that starts at boot or login.
+3. Set the repository variable `CI_RUNNER` to `self-hosted` (Settings →
+   Secrets and variables → Actions → Variables). Every CI job then runs there.
+   Delete the variable to go back to GitHub's runners.
+
+The CI's PostgreSQL and Redis use host ports 55432 and 56379, so they do not
+clash with a database already running on that machine.
+
+**Security:** a self-hosted runner executes the code in each pull request, with
+access to the machine's Docker. That is acceptable for a private repository
+where only trusted people open pull requests. Do not use it on a public
+repository, and remove it before adding outside collaborators.
+
