@@ -14,7 +14,7 @@ import { apiMessage, asArray } from '../utils/safe';
 import { startOfflineSync } from '../services/OfflineSyncService';
 import {
   FiActivity, FiAlertTriangle, FiCheckCircle, FiXCircle,
-  FiCamera, FiUnlock
+  FiCamera, FiUnlock, FiUserCheck
 } from 'react-icons/fi';
 
 // Endpoints come from src/config.ts so deployments are environment-driven
@@ -30,7 +30,9 @@ interface Alert {
   registered_color?: string | null;
   plate_confidence?: number | null;
   type_confidence?: number | null;
-  mismatch_type: 'none' | 'type' | 'color' | 'unregistered';
+  mismatch_type: 'none' | 'type' | 'color' | 'unregistered' | 'visitor';
+  /** Set when a visitor pass covers an otherwise unregistered plate. */
+  visitor_pass?: { visitor_name: string; host_name?: string | null; valid_until: string } | null;
   status: 'open' | 'in_progress' | 'closed';
   feedback_status: string;
   timestamp: string;
@@ -47,6 +49,7 @@ const MISMATCH_LABEL: Record<string, string> = {
   type: 'Vehicle type mismatch',
   color: 'Colour mismatch',
   unregistered: 'Unregistered plate',
+  visitor: 'Expected visitor',
 };
 
 const RECENT_LIMIT = 10;
@@ -248,6 +251,7 @@ const GuardDashboard: React.FC = () => {
   const getStatusColor = (mismatch: string) => {
     switch (mismatch) {
       case 'none': return 'green';
+      case 'visitor': return 'blue';
       case 'unregistered': return 'red';
       default: return 'orange';
     }
@@ -256,6 +260,7 @@ const GuardDashboard: React.FC = () => {
   const getStatusIcon = (mismatch: string) => {
     switch (mismatch) {
       case 'none': return FiCheckCircle;
+      case 'visitor': return FiUserCheck;
       case 'unregistered': return FiXCircle;
       default: return FiAlertTriangle;
     }
@@ -400,6 +405,13 @@ const GuardDashboard: React.FC = () => {
                       </Text>
                     </Flex>
                     
+                    {alert.visitor_pass && (
+                      <Text fontSize="sm" color="blue.700" mb={1}>
+                        Visitor: {alert.visitor_pass.visitor_name}
+                        {alert.visitor_pass.host_name ? ` (for ${alert.visitor_pass.host_name})` : ''}
+                      </Text>
+                    )}
+
                     {(alert.detected_type || alert.detected_color) && (
                       <Text fontSize="sm" color="gray.600" mb={1}>
                         Detected: {[alert.detected_color, alert.detected_type].filter(Boolean).join(' ')}
@@ -537,7 +549,17 @@ const GuardDashboard: React.FC = () => {
                   </HStack>
                 )}
 
-                {alert.mismatch_type !== 'none' && (
+                {alert.visitor_pass && (
+                  <Box p={3} bg="blue.50" border="1px" borderColor="blue.200" borderRadius="md">
+                    <Text color="blue.800" fontSize="sm">
+                      Expected visitor: <b>{alert.visitor_pass.visitor_name}</b>
+                      {alert.visitor_pass.host_name ? ` for ${alert.visitor_pass.host_name}` : ''}
+                      {`, pass valid until ${new Date(alert.visitor_pass.valid_until).toLocaleString()}.`}
+                    </Text>
+                  </Box>
+                )}
+
+                {alert.mismatch_type !== 'none' && alert.mismatch_type !== 'visitor' && (
                   <Box p={3} bg="red.50" border="1px" borderColor="red.200" borderRadius="md">
                     <Text color="red.800" fontSize="sm">
                       {MISMATCH_LABEL[alert.mismatch_type] ?? alert.mismatch_type}

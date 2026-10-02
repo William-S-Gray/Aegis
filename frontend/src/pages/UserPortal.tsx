@@ -8,6 +8,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
+import VisitorPasses from '../components/VisitorPasses';
 import { asArray, asObject, asNumber } from '../utils/safe';
 import { FiTruck, FiClock, FiShield, FiCalendar } from 'react-icons/fi';
 
@@ -299,6 +300,8 @@ const UserPortal: React.FC = () => {
           </CardBody>
         </Card>
       </SimpleGrid>
+
+      <VisitorPasses />
 
       {/* Vehicle Details Modal */}
       <Modal isOpen={isOpen} onClose={onClose} size="lg">

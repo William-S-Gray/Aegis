@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     retention_crop_days: int = 30
     # Revoked and expired refresh tokens have no value after this.
     retention_refresh_token_days: int = 30
+    # Days after a visitor pass ends. It names a visitor and is only needed
+    # around the visit; the alerts it covered keep their own retention.
+    retention_visitor_pass_days: int = 90
 
     # ---- Observability --------------------------------------------------
     log_level: str = "INFO"

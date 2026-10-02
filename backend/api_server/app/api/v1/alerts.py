@@ -23,6 +23,7 @@ from app.models import (
     Role,
     User,
     Vehicle,
+    VisitorPass,
     normalize_plate,
 )
 from app.schemas import (
@@ -119,6 +120,22 @@ def _type_consistent(detected: str, registered: str) -> bool:
     return family is not None and registered.strip().lower() in family
 
 
+def _valid_pass(db: Session, plate: str) -> VisitorPass | None:
+    """A pass covering this plate right now, if any (the latest-ending one)."""
+    now = datetime.now(timezone.utc)
+    return db.scalar(
+        select(VisitorPass)
+        .where(
+            VisitorPass.plate_number == plate,
+            VisitorPass.valid_from <= now,
+            VisitorPass.valid_until > now,
+            VisitorPass.revoked_at.is_(None),
+        )
+        .order_by(VisitorPass.valid_until.desc())
+        .limit(1)
+    )
+
+
 def classify_mismatch(db: Session, alert: Alert, vehicle: Vehicle | None) -> MismatchType:
     """
     Decide why (or whether) a detection deserves attention.
@@ -127,7 +144,9 @@ def classify_mismatch(db: Session, alert: Alert, vehicle: Vehicle | None) -> Mis
     signal and the one a guard must act on first.
     """
     if vehicle is None:
-        return MismatchType.UNREGISTERED
+        visitor_pass = _valid_pass(db, alert.plate_number)
+        alert.visitor_pass_id = visitor_pass.id if visitor_pass else None
+        return MismatchType.VISITOR if visitor_pass else MismatchType.UNREGISTERED
 
     if alert.detected_type and vehicle.vehicle_type:
         if not (
