@@ -67,6 +67,8 @@ class MismatchType(str, enum.Enum):
     UNREGISTERED = "unregistered"
     # Not in the register, but a valid visitor pass covers it.
     VISITOR = "visitor"
+    # On the watchlist (stolen, banned, wanted). Outranks every other verdict.
+    WATCHLIST = "watchlist"
 
 
 class Alert(Base):
@@ -107,6 +109,10 @@ class Alert(Base):
     )
     site_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("sites.id", ondelete="SET NULL"), index=True
+    )
+    # The entry that flagged this plate, if it is on the watchlist.
+    watchlist_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("watchlist_entries.id", ondelete="SET NULL"), index=True
     )
     # The pass that covered an otherwise unregistered plate.
     visitor_pass_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -151,6 +157,7 @@ class Alert(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     visitor_pass = relationship("VisitorPass", lazy="joined")
+    watchlist_entry = relationship("WatchlistEntry", lazy="joined")
 
     comments: Mapped[list["AlertComment"]] = relationship(
         back_populates="alert",

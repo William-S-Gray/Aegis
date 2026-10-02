@@ -12,6 +12,7 @@ from app.api.v1 import (
     users,
     vehicles,
     visitor_passes,
+    watchlist,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -26,3 +27,4 @@ api_router.include_router(analytics.router)
 api_router.include_router(realtime.router)
 api_router.include_router(cameras.router)
 api_router.include_router(visitor_passes.router)
+api_router.include_router(watchlist.router)

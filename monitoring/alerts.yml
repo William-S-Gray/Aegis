@@ -87,6 +87,20 @@ groups:
             but nobody is being notified in real time. Expected out of hours —
             page only if this fires during a staffed shift.
 
+      - alert: AegisWatchlistHit
+        # Counted by alert type only: the plate never reaches Prometheus or
+        # Discord. The guard console has the details.
+        expr: sum(increase(aegis_alerts_created_total{mismatch_type="watchlist"}[2m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "A watchlisted vehicle was detected at a gate"
+          description: >-
+            A camera read a plate on the watchlist (stolen, banned or wanted).
+            Open the guard console now: the alert shows the plate, the reason
+            it is watched and the camera image. Follow the site's procedure
+            for that reason; do not confront the driver alone.
+
       - alert: AegisReviewQueueBacklog
         expr: aegis_review_queue_depth > 50
         for: 1h

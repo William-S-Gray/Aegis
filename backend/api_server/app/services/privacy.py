@@ -18,6 +18,7 @@ from app.models import (
     User,
     Vehicle,
     VisitorPass,
+    WatchlistEntry,
     normalize_plate,
 )
 
@@ -116,6 +117,7 @@ def export_by_plate(db: Session, plate: str) -> dict[str, Any]:
         db.scalars(select(AccessLog).where(AccessLog.plate_number == normalized)).all()
     )
     passes = list(db.scalars(select(VisitorPass).where(VisitorPass.plate_number == normalized)).unique())
+    watch = list(db.scalars(select(WatchlistEntry).where(WatchlistEntry.plate_number == normalized)))
 
     alert_ids = [str(a.id) for a in alerts]
     # SQL narrows by substring; the token match then drops rows that only
@@ -133,11 +135,17 @@ def export_by_plate(db: Session, plate: str) -> dict[str, Any]:
         "alerts": [_serialize_alert(a) for a in alerts],
         "access_logs": [_serialize_access_log(entry) for entry in logs],
         "visitor_passes": [_serialize_pass(p) for p in passes],
+        "watchlist_entries": [
+            {"id": str(w.id), "reason": w.reason, "created_at": w.created_at.isoformat(),
+             "removed_at": w.removed_at.isoformat() if w.removed_at else None}
+            for w in watch
+        ],
         "audit_entries": [_serialize_audit(entry) for entry in audit_rows],
         "counts": {
             "alerts": len(alerts),
             "access_logs": len(logs),
             "visitor_passes": len(passes),
+            "watchlist_entries": len(watch),
             "audit_entries": len(audit_rows),
         },
     }
@@ -170,6 +178,7 @@ def erase_by_plate(
         "audit_entries": 0,
         "comments": 0,
         "visitor_passes": 0,
+        "watchlist_entries": 0,
     }
 
     vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == normalized))
@@ -216,6 +225,11 @@ def erase_by_plate(
         visitor_pass.visitor_name = "erased"
         visitor_pass.notes = None
         counts["visitor_passes"] += 1
+
+    for entry in db.scalars(select(WatchlistEntry).where(WatchlistEntry.plate_number == normalized)):
+        entry.plate_number = tombstone
+        entry.plate_display = tombstone
+        counts["watchlist_entries"] += 1
 
     # Streamed rather than materialised: this table is audited on every read and
     # is the fastest-growing one in the schema.

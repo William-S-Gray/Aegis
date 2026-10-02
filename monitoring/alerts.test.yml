@@ -1,0 +1,19 @@
+# promtool test rules: alert rules that must fire, checked in CI.
+rule_files: [/cfg/alerts.yml]
+evaluation_interval: 15s
+tests:
+  - interval: 15s
+    input_series:
+      - series: 'aegis_alerts_created_total{mismatch_type="watchlist",requires_review="false"}'
+        values: '0 0 0 1 1 1 1 1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AegisWatchlistHit
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "A watchlisted vehicle was detected at a gate"
+              description: "A camera read a plate on the watchlist (stolen, banned or wanted). Open the guard console now: the alert shows the plate, the reason it is watched and the camera image. Follow the site's procedure for that reason; do not confront the driver alone."
+      - eval_time: 0m
+        alertname: AegisWatchlistHit
+        exp_alerts: []

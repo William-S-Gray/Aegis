@@ -233,7 +233,7 @@ class TestSubjectExport:
         payload = privacy.export_by_plate(seeded, "NOSUCH1")
 
         assert payload["vehicle"] is None
-        assert payload["counts"] == {"alerts": 0, "access_logs": 0, "visitor_passes": 0, "audit_entries": 0}
+        assert payload["counts"] == {"alerts": 0, "access_logs": 0, "visitor_passes": 0, "watchlist_entries": 0, "audit_entries": 0}
 
 
 class TestErasure:
@@ -321,6 +321,7 @@ class TestErasure:
             "audit_entries": 0,
             "comments": 0,
             "visitor_passes": 0,
+            "watchlist_entries": 0,
         }
 
 

@@ -135,6 +135,24 @@ the plate — writing it there would recreate the data just removed.
 > SLA, or document a re-erasure step after any restore. Agree which with the
 > customer's DPO.
 
+## Watchlist
+
+Administrators flag plates on sight in the admin dashboard's **Watchlist**
+tab: a plate and a reason (for example *"Reported stolen 30 Sep, call
+police"*). Guards can see the list.
+
+- **At the gate:** a camera read of a watched plate is a **WATCHLIST** alert,
+  which outranks every other verdict, even a registered vehicle that matches,
+  because a stolen registered car looks exactly like that. The guard console
+  shows the reason in a red banner at the top of the decision prompt.
+- **Paging:** the `AegisWatchlistHit` rule pages the critical channel (Discord)
+  within about a minute. Prometheus only counts hits by alert type, so **the
+  plate never leaves the site**; the page tells the on-call person to open the
+  guard console. The rule has a test (`monitoring/alerts.test.yml`) run in CI.
+- **Records:** adding and removing entries are audited. Removed entries are
+  kept for `RETENTION_WATCHLIST_DAYS` (365), then purged. Subject export and
+  erasure by plate include watchlist entries.
+
 ## Visitor passes
 
 Residents add expected visitors in the user portal (**My visitors**): plate,
