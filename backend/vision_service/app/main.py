@@ -120,7 +120,7 @@ def run(settings: VisionSettings, once: bool = False) -> int:
                 min_publish_confidence=settings.min_publish_confidence,
                 dedupe_window_seconds=settings.dedupe_window_seconds,
                 confirm_frames=settings.confirm_frames,
-                confirm_window_frames=settings.confirm_window_frames,
+                track_max_gap_frames=settings.track_max_gap_frames,
                 vehicle_classifier=vehicle_classifier,
             )
             for uri in sources

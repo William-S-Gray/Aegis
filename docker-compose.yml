@@ -52,6 +52,10 @@ services:
       # X-Forwarded-For; everyone else is identified by their TCP address.
       # Never "*": that lets any client choose the IP the login throttle sees.
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # Plate-read gating; see .env.example. Unset keeps the measured defaults.
+      PLATE_AUTO_ACCEPT_CONFIDENCE: ${PLATE_AUTO_ACCEPT_CONFIDENCE:-0.85}
+      PLATE_AUTO_ACCEPT_MIN_WIDTH: ${PLATE_AUTO_ACCEPT_MIN_WIDTH:-120}
+      PLATE_FORMATS: ${PLATE_FORMATS:-}
     ports:
       - "${API_PORT:-8081}:8000"
     depends_on:

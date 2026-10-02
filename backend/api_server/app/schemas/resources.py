@@ -220,6 +220,8 @@ class AlertPublic(BaseModel):
     detector_name: str | None = None
     detector_version: str | None = None
     has_crop: bool = False
+    # Review queue only: registered plates one character from this read.
+    suggested_plates: list[str] = []
 
     comments: list[AlertCommentPublic] = []
 

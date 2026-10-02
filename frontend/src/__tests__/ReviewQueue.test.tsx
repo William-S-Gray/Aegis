@@ -156,4 +156,20 @@ describe('ReviewQueue', () => {
 
     expect(await screen.findByText(/nothing waiting/i)).toBeInTheDocument();
   });
+
+  it('offers registered plates one character away, filling the box only on click', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [{ ...alertFixture, suggested_plates: ['AB12CD'] }],
+    } as never);
+    const post = vi.spyOn(api, 'post');
+
+    renderPage();
+
+    const input = (await screen.findByPlaceholderText(/plate as you read it/i)) as HTMLInputElement;
+    expect(input.value).toBe('');
+    await userEvent.click(screen.getByRole('button', { name: 'AB12CD' }));
+    expect(input.value).toBe('AB12CD');
+    // Nothing is confirmed until the guard presses Confirm.
+    expect(post).not.toHaveBeenCalled();
+  });
 });

@@ -90,6 +90,27 @@ class TestConfidenceGating:
 
         assert body["requires_review"] is False
 
+    def test_a_read_outside_the_expected_formats_goes_to_review(self, client, auth, monkeypatch):
+        """A dropped character breaks the format; the reader stays confident."""
+        from app.api.v1 import alerts
+
+        monkeypatch.setattr(alerts.settings, "plate_formats", "[A-Z]{3}[0-9]{4}")
+        headers = auth()
+
+        truncated = raise_alert(client, headers, plate_number="AAA532", plate_confidence=1.0).json()
+        correct = raise_alert(client, headers, plate_number="AAA5329", plate_confidence=1.0).json()
+
+        assert truncated["review_reason"] == "unexpected_format"
+        assert correct["requires_review"] is False
+
+    def test_an_invalid_format_pattern_is_refused_at_startup(self):
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        with pytest.raises(ValidationError, match="invalid pattern"):
+            Settings(plate_formats="[A-Z")
+
     def test_manual_entry_never_requires_review(self, client, auth):
         """A guard typing a plate has already vouched for it."""
         headers = auth()
@@ -136,6 +157,46 @@ class TestReviewQueue:
 
         actions = set(db.scalars(select(AuditLog.action)).all())
         assert "alert.review_queue_viewed" in actions
+
+
+class TestSuggestions:
+    def register(self, client, auth, *plates):
+        admin = auth(Role.ADMIN, email="admin@aegis.example")
+        for plate in plates:
+            client.post("/api/v1/vehicles", headers=admin, json={"plate_number": plate})
+
+    def test_a_one_character_misread_suggests_the_registered_plate(self, client, auth):
+        """B read as 8, or a character dropped: one click to correct, not retyping."""
+        self.register(client, auth, "AB12CD", "ZZ99ZZ")
+        guard = auth()
+        raise_alert(client, guard, plate_number="A812CD", plate_confidence=0.70)
+        raise_alert(client, guard, plate_number="AB12C", plate_confidence=0.70)
+
+        queue = client.get("/api/v1/alerts/review-queue", headers=guard).json()
+
+        assert [a["suggested_plates"] for a in queue] == [["AB12CD"], ["AB12CD"]]
+
+    def test_no_suggestion_when_nothing_is_close(self, client, auth):
+        self.register(client, auth, "AB12CD")
+        guard = auth()
+        raise_alert(client, guard, plate_number="QQ77QQ", plate_confidence=0.70)
+
+        queue = client.get("/api/v1/alerts/review-queue", headers=guard).json()
+
+        assert queue[0]["suggested_plates"] == []
+
+    def test_a_deactivated_vehicle_is_not_suggested(self, client, auth, db):
+        from app.models import Vehicle
+
+        self.register(client, auth, "AB12CD")
+        db.query(Vehicle).update({"is_active": False})
+        db.commit()
+        guard = auth()
+        raise_alert(client, guard, plate_number="A812CD", plate_confidence=0.70)
+
+        queue = client.get("/api/v1/alerts/review-queue", headers=guard).json()
+
+        assert queue[0]["suggested_plates"] == []
 
 
 class TestPlateConfirmation:

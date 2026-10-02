@@ -56,11 +56,11 @@ class VisionSettings(BaseSettings):
     # A plate seen repeatedly in consecutive frames is one event, not many.
     dedupe_window_seconds: float = 30.0
 
-    # A live read is published once the same plate is read in this many of the
-    # camera's last `confirm_window_frames` frames; 1 turns this off. At the
-    # default frame interval that is under a second of the vehicle in view.
+    # A live plate is followed across frames and published once it has this
+    # many reads that agree (see app/tracking.py); 1 turns this off. A plate
+    # unseen for more than `track_max_gap_frames` frames is a new vehicle.
     confirm_frames: int = 3
-    confirm_window_frames: int = 5
+    track_max_gap_frames: int = 3
 
     # Reads below this are dropped locally without troubling the API. The API
     # enforces its own floor as well; this one just saves a round trip.

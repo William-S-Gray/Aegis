@@ -4,11 +4,12 @@ import base64
 import logging
 import re
 import time
-from collections import defaultdict, deque
+from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from app.client import AegisClient
+from app.tracking import PlateTracker
 from app.types import Frame, Observation, PlateDetector, PlateReader
 
 logger = logging.getLogger(__name__)
@@ -134,7 +135,7 @@ class Pipeline:
         min_publish_confidence: float = 0.50,
         dedupe_window_seconds: float = 30.0,
         confirm_frames: int = 3,
-        confirm_window_frames: int = 5,
+        track_max_gap_frames: int = 3,
         vehicle_classifier: VehicleClassifier | None = None,
         clock=time.monotonic,
     ):
@@ -146,9 +147,9 @@ class Pipeline:
         self._recent = _RecentPlates(dedupe_window_seconds)
         self._confirm_frames = confirm_frames
         self._vehicle_classifier = vehicle_classifier
-        # Per camera: the plates read in each of its last few frames.
-        self._history: dict[str, deque[set[str]]] = defaultdict(
-            lambda: deque(maxlen=max(confirm_window_frames, confirm_frames))
+        # Per camera: the plates currently in view, followed across frames.
+        self._trackers: dict[str, PlateTracker] = defaultdict(
+            lambda: PlateTracker(confirm_frames, track_max_gap_frames)
         )
         self._clock = clock
         self.stats = PipelineStats()
@@ -203,26 +204,23 @@ class Pipeline:
         bind = getattr(self._reader, "bind", None)
         return bind(frame) if callable(bind) else self._reader
 
-    def _confirmed(self, frame: Frame, observations: list[Observation]) -> list[Observation]:
+    def _confirmed(self, frame: Frame, observations: list[Observation], now: float) -> list[Observation]:
         """
-        Only reads seen in several of a camera's recent frames.
+        Reads confirmed by following the plate across the camera's frames.
 
-        One blurred frame can misread a plate with high confidence: on a
-        webcam test, a plate read correctly 142 times was read once as a
-        different plate at 0.92, which would have been auto-accepted. The
-        true reading dominates across frames; a misread does not repeat.
+        One blurred frame can misread a plate with high confidence (a webcam
+        plate read right 142 times was read once as another plate at 0.92), so
+        a live read is only published once its track agrees on it; see
+        app/tracking.py.
         """
         if frame.still or self._confirm_frames <= 1:
             return observations
-        history = self._history[frame.source]
-        history.append({o.plate_text for o in observations})
-        confirmed = []
-        for observation in observations:
-            if sum(observation.plate_text in seen for seen in history) >= self._confirm_frames:
-                confirmed.append(observation)
-            else:
-                self.stats.unconfirmed += 1
-        return confirmed
+        ready, present, held = self._trackers[frame.source].update(observations)
+        for plate in present:
+            # A waiting car stays one event: keep its de-duplication fresh.
+            self._recent.is_duplicate(plate, now)
+        self.stats.unconfirmed += held
+        return ready
 
     def _with_vehicle_type(self, frame: Frame, observation: Observation) -> Observation:
         """
@@ -271,7 +269,7 @@ class Pipeline:
                 continue
             candidates.append(observation)
 
-        for observation in self._confirmed(frame, candidates):
+        for observation in self._confirmed(frame, candidates, now):
             if self._recent.is_duplicate(observation.plate_text, now):
                 self.stats.deduped += 1
                 continue
