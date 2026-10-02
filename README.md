@@ -130,7 +130,8 @@ alert before relying on it. See [docs/operations.md](docs/operations.md).
 ## Operations
 
 Backups, retention, and subject-rights requests are documented in
-[docs/operations.md](docs/operations.md).
+[docs/operations.md](docs/operations.md). Mounting and connecting gate cameras
+is covered in [docs/camera-installation.md](docs/camera-installation.md).
 
 ```bash
 BACKUP_ENCRYPT_TO=ops@example.com scripts/backup.sh ./backups   # encrypted dump

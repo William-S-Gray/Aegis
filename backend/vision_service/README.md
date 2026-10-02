@@ -196,7 +196,9 @@ needs OpenCV (`requirements-ml.txt`; the Docker image includes it).
 
 - Replace the stub; the service refuses to run with it outside development.
 - Point `VISION_SOURCES` at RTSP/MJPEG cameras (or a USB camera such as
-  `/dev/video0`) rather than a directory.
+  `/dev/video0`) rather than a directory. Mount them following
+  [docs/camera-installation.md](../../docs/camera-installation.md): plate size
+  in the image matters more than any setting here.
 - Give the service account the **`service` role**, never `guard`. A service
   account may publish detections and nothing else — it cannot read the vehicle
   register, list alerts, confirm plates, or record an access decision. Camera
