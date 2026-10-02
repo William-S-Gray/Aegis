@@ -92,3 +92,24 @@ def test_a_failing_camera_does_not_stop_the_others(run_with):
 
     main._stop.set()
     worker.join(timeout=5)
+
+
+def test_a_tagged_camera_publishes_its_direction(monkeypatch):
+    main._stop.clear()
+    client = FakeClient()
+    monkeypatch.setattr(main, "AegisClient", lambda **_: client)
+
+    class OneFrame:
+        def frames(self):
+            yield Frame(image=b"x", source="rtsp://in", still=True)
+            main._stop.set()
+
+    monkeypatch.setattr(main, "build_source", lambda uri, _settings: OneFrame())
+    settings = VisionSettings(
+        service_email="svc@example.com", service_password="x", sources="rtsp://in|entry",
+        preview_interval_seconds=0, vehicle_model="",
+    )
+
+    main.run(settings)
+
+    assert client.alerts and {a["direction"] for a in client.alerts} == {"entry"}

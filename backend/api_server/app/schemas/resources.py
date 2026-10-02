@@ -3,7 +3,7 @@ import binascii
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -177,6 +177,17 @@ class WatchlistSummary(BaseModel):
     reason: str
 
 
+class VisitPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    plate_number: str
+    entered_at: datetime | None = None
+    exited_at: datetime | None = None
+    vehicle_id: uuid.UUID | None = None
+    visitor_pass: VisitorSummary | None = None
+
+
 class VehicleUpdate(BaseModel):
     make: str | None = Field(default=None, max_length=80)
     model: str | None = Field(default=None, max_length=80)
@@ -295,6 +306,7 @@ class AlertPublic(BaseModel):
     detector_name: str | None = None
     detector_version: str | None = None
     has_crop: bool = False
+    direction: str | None = None
     visitor_pass: VisitorSummary | None = None
     watchlist_entry: WatchlistSummary | None = None
     # Review queue only: registered plates one character from this read.
@@ -329,6 +341,8 @@ class AlertCreate(BaseModel):
     plate_crop_jpeg: str | None = Field(default=None, max_length=90_000)
     # Width of the plate in the camera image, for the small-plate review rule.
     plate_width_px: int | None = Field(default=None, ge=1, le=20_000)
+    # From a camera tagged entry or exit; pairs reads into visits.
+    direction: Literal["entry", "exit"] | None = None
 
     @field_validator("plate_crop_jpeg")
     @classmethod

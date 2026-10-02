@@ -17,6 +17,7 @@ from app.models import (
     AuditLog,
     User,
     Vehicle,
+    Visit,
     VisitorPass,
     WatchlistEntry,
     normalize_plate,
@@ -118,6 +119,7 @@ def export_by_plate(db: Session, plate: str) -> dict[str, Any]:
     )
     passes = list(db.scalars(select(VisitorPass).where(VisitorPass.plate_number == normalized)).unique())
     watch = list(db.scalars(select(WatchlistEntry).where(WatchlistEntry.plate_number == normalized)))
+    visit_rows = list(db.scalars(select(Visit).where(Visit.plate_number == normalized)).unique())
 
     alert_ids = [str(a.id) for a in alerts]
     # SQL narrows by substring; the token match then drops rows that only
@@ -135,6 +137,11 @@ def export_by_plate(db: Session, plate: str) -> dict[str, Any]:
         "alerts": [_serialize_alert(a) for a in alerts],
         "access_logs": [_serialize_access_log(entry) for entry in logs],
         "visitor_passes": [_serialize_pass(p) for p in passes],
+        "visits": [
+            {"id": str(v.id), "entered_at": v.entered_at.isoformat() if v.entered_at else None,
+             "exited_at": v.exited_at.isoformat() if v.exited_at else None}
+            for v in visit_rows
+        ],
         "watchlist_entries": [
             {"id": str(w.id), "reason": w.reason, "created_at": w.created_at.isoformat(),
              "removed_at": w.removed_at.isoformat() if w.removed_at else None}
@@ -146,6 +153,7 @@ def export_by_plate(db: Session, plate: str) -> dict[str, Any]:
             "access_logs": len(logs),
             "visitor_passes": len(passes),
             "watchlist_entries": len(watch),
+            "visits": len(visit_rows),
             "audit_entries": len(audit_rows),
         },
     }
@@ -179,6 +187,7 @@ def erase_by_plate(
         "comments": 0,
         "visitor_passes": 0,
         "watchlist_entries": 0,
+        "visits": 0,
     }
 
     vehicle = db.scalar(select(Vehicle).where(Vehicle.plate_number == normalized))
@@ -225,6 +234,10 @@ def erase_by_plate(
         visitor_pass.visitor_name = "erased"
         visitor_pass.notes = None
         counts["visitor_passes"] += 1
+
+    for visit in db.scalars(select(Visit).where(Visit.plate_number == normalized)).unique():
+        visit.plate_number = tombstone
+        counts["visits"] += 1
 
     for entry in db.scalars(select(WatchlistEntry).where(WatchlistEntry.plate_number == normalized)):
         entry.plate_number = tombstone

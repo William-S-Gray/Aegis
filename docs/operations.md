@@ -135,6 +135,27 @@ the plate — writing it there would recreate the data just removed.
 > SLA, or document a re-erasure step after any restore. Agree which with the
 > customer's DPO.
 
+## Visits: who is on site
+
+With cameras tagged `|entry` and `|exit` (see
+[camera-installation.md](camera-installation.md#5-connecting-the-camera-to-aegis)),
+an entry read opens a **visit** and the next exit read of the same plate closes
+it:
+
+- **Guard console:** the **On site now** panel lists vehicles inside and how
+  long they have been there. A visitor still inside after their pass ended is
+  flagged **Pass ended**.
+- **Admin dashboard:** the **Visits** tab shows recent visits, their lengths,
+  and the median stay.
+- **Edge cases:**
+  - A second entry read while a vehicle is inside is the same visit.
+  - An exit with no entry on record is kept as "entry not seen".
+  - A guard **denying** the vehicle at the entry cancels its visit, because it
+    never came in.
+- **Records:** visits are personal data. Viewing them is audited, they are
+  purged after `RETENTION_VISIT_DAYS` (365), and subject export and erasure by
+  plate include them.
+
 ## Watchlist
 
 Administrators flag plates on sight in the admin dashboard's **Watchlist**

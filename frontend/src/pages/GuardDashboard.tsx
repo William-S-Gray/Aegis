@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { guardAlertsSocketUrl } from '../config';
 import CameraPanel from '../components/CameraPanel';
+import OnSiteNow from '../components/OnSiteNow';
 import db, { newClientRef } from '../db';
 import api from '../api';
 import { apiMessage, asArray } from '../utils/safe';
@@ -456,6 +457,8 @@ const GuardDashboard: React.FC = () => {
 
         {/* Quick Actions & Status */}
         <VStack spacing={6} align="stretch">
+          <OnSiteNow />
+
           {/* Connection Status */}
           <Card bg={bgColor} border="1px" borderColor={borderColor}>
             <CardHeader>

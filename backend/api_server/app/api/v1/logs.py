@@ -1,4 +1,5 @@
 import math
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -9,8 +10,9 @@ from sqlalchemy.orm import Session
 from app.core import audit
 from app.core.deps import require_any_user, require_guard
 from app.database import get_db
-from app.models import AccessLog, Role, User, Vehicle, normalize_plate
+from app.models import AccessAction, AccessLog, Role, User, Vehicle, normalize_plate
 from app.schemas import AccessLogCreate, AccessLogPage, AccessLogPublic
+from app.services import visits
 
 router = APIRouter(tags=["access-logs"])
 
@@ -118,6 +120,15 @@ def create_access_log(
         if existing is None:
             raise
         return existing
+
+    if payload.action == AccessAction.DENY:
+        # Turned away at the entry: the visit that read opened never happened.
+        try:
+            alert_id = uuid.UUID(str((payload.details or {}).get("alert_id")))
+        except ValueError:
+            alert_id = None
+        if alert_id:
+            visits.cancel_denied_entry(db, alert_id)
 
     audit.record(
         db,
