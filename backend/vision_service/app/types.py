@@ -22,6 +22,8 @@ class Frame:
     # A standalone picture rather than one frame of a stream, so there are no
     # neighbouring frames to confirm a read against.
     still: bool = False
+    # "entry" or "exit" for a camera tagged with a direction; None otherwise.
+    direction: str | None = None
 
 
 @dataclass(frozen=True)

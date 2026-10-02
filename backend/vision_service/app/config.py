@@ -68,6 +68,25 @@ class VisionSettings(BaseSettings):
 
     @property
     def source_list(self) -> list[str]:
+        return [entry.split("|", 1)[0].strip() for entry in self._source_entries()]
+
+    @property
+    def source_directions(self) -> dict[str, str]:
+        """
+        A camera's direction, from a "|entry" or "|exit" suffix on its source:
+        rtsp://gate-in/stream|entry. Untagged cameras record no direction.
+        """
+        directions = {}
+        for entry in self._source_entries():
+            uri, _, direction = entry.partition("|")
+            direction = direction.strip().lower()
+            if direction:
+                if direction not in ("entry", "exit"):
+                    raise ValueError(f"VISION_SOURCES: {uri.strip()!r} has direction {direction!r}; use entry or exit")
+                directions[uri.strip()] = direction
+        return directions
+
+    def _source_entries(self) -> list[str]:
         return [s.strip() for s in self.sources.split(",") if s.strip()]
 
     @property

@@ -12,6 +12,7 @@ from app.models.rule import AttributeMismatchRule
 from app.models.site import Site
 from app.models.user import RefreshToken, Role, User
 from app.models.vehicle import PLATE_MAX_LENGTH, Vehicle, normalize_plate
+from app.models.visit import Visit
 from app.models.visitor_pass import VisitorPass
 from app.models.watchlist import WatchlistEntry
 
@@ -32,6 +33,7 @@ __all__ = [
     "Site",
     "User",
     "Vehicle",
+    "Visit",
     "VisitorPass",
     "WatchlistEntry",
     "normalize_plate",

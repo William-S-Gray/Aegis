@@ -97,6 +97,15 @@ cameras with commas; each runs in parallel.
 VISION_SOURCES=rtsp://aegis:<password>@192.168.10.21:554/Streaming/Channels/101
 ```
 
+**Entry and exit:** to know who is on site now and how long vehicles stay,
+tag each camera with the direction it watches by adding `|entry` or `|exit`:
+
+```env
+VISION_SOURCES=rtsp://aegis:<pw>@192.168.10.21:554/s1|entry,rtsp://aegis:<pw>@192.168.10.22:554/s1|exit
+```
+
+Untagged cameras still raise alerts, but they do not open or close visits.
+
 The exact path varies by manufacturer; it is in the camera's manual or web
 interface. Then start the vision service:
 

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core import audit, metrics
 from app.core.deps import require_alert_publisher, require_guard
 from app.core.ws_manager import manager
+from app.services import visits
 from app.database import get_db
 from app.models import (
     Alert,
@@ -474,6 +475,7 @@ def create_alert(
         site_id=payload.site_id or (vehicle.site_id if vehicle else None),
         detector_name=payload.detector_name,
         detector_version=payload.detector_version,
+        direction=payload.direction,
         plate_crop=base64.b64decode(payload.plate_crop_jpeg) if payload.plate_crop_jpeg else None,
     )
     alert.mismatch_type = classify_mismatch(db, alert, vehicle)
@@ -484,6 +486,7 @@ def create_alert(
 
     db.add(alert)
     db.flush()
+    visits.record(db, alert)
 
     audit.record(
         db,

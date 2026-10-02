@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import contextvars
+from dataclasses import replace
 import logging
 import signal
 import sys
@@ -160,10 +161,13 @@ def _capture(uri: str, settings: VisionSettings, pipeline: Pipeline, preview: Pr
     """Read one camera until it ends or the service stops."""
     source_var.set(uri)
     logger.info("Processing source", extra={"uri": uri})
+    direction = settings.source_directions.get(uri)
     try:
         for frame in build_source(uri, settings).frames():
             if _stop.is_set():
                 break
+            if direction:
+                frame = replace(frame, direction=direction)
             pipeline.process(frame)
             preview.offer(uri, frame.image)
             if once:

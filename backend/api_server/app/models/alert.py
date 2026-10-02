@@ -110,6 +110,8 @@ class Alert(Base):
     site_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("sites.id", ondelete="SET NULL"), index=True
     )
+    # "entry" or "exit" when the camera is tagged with a direction.
+    direction: Mapped[str | None] = mapped_column(String(5))
     # The entry that flagged this plate, if it is on the watchlist.
     watchlist_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("watchlist_entries.id", ondelete="SET NULL"), index=True

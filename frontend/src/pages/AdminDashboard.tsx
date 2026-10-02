@@ -59,6 +59,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { mockAuthEnabled } from '../config';
 import WatchlistManager from '../components/WatchlistManager';
+import VisitHistory from '../components/VisitHistory';
 import { asArray, asObject, asNumber, apiMessage } from '../utils/safe';
 
 interface User {
@@ -764,6 +765,7 @@ const AdminDashboard: React.FC = () => {
           <Tab>Vehicles</Tab>
           <Tab>Access Logs</Tab>
           <Tab>Watchlist</Tab>
+          <Tab>Visits</Tab>
         </TabList>
         <TabPanels>
           {/* Users Tab */}
@@ -930,6 +932,9 @@ const AdminDashboard: React.FC = () => {
           </TabPanel>
           <TabPanel>
             <WatchlistManager />
+          </TabPanel>
+          <TabPanel>
+            <VisitHistory />
           </TabPanel>
         </TabPanels>
       </Tabs>

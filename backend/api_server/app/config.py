@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     retention_visitor_pass_days: int = 90
     # Days after a watchlist entry is removed. Active entries are kept.
     retention_watchlist_days: int = 365
+    # Who was on site and when; kept as long as the alerts they come from.
+    retention_visit_days: int = 365
 
     # ---- Observability --------------------------------------------------
     log_level: str = "INFO"

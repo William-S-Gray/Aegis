@@ -193,6 +193,7 @@ class TestGating:
             # Test frames are bytes, not image arrays, so there is no crop.
             "plate_crop_jpeg": None,
             "plate_width_px": 10,
+            "direction": None,
         }
 
 
@@ -446,3 +447,14 @@ def test_image_directories_include_webp_and_uppercase_suffixes(tmp_path, monkeyp
     frames = list(sources.ImageDirectorySource(tmp_path).frames())
 
     assert [f.image for f in frames] == ["a.jpg", "b.JPG", "c.jpeg", "d.webp", "e.PNG"]
+
+
+def test_sources_can_be_tagged_with_a_direction():
+    from app.config import VisionSettings
+
+    settings = VisionSettings(sources="rtsp://in/s|entry, rtsp://out/s|EXIT, /data/stills")
+
+    assert settings.source_list == ["rtsp://in/s", "rtsp://out/s", "/data/stills"]
+    assert settings.source_directions == {"rtsp://in/s": "entry", "rtsp://out/s": "exit"}
+    with pytest.raises(ValueError, match="use entry or exit"):
+        VisionSettings(sources="rtsp://in/s|inbound").source_directions
