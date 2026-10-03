@@ -14,8 +14,9 @@ services:
     plan: free
     dockerfilePath: ./backend/api_server/Dockerfile
     dockerContext: ./backend/api_server
-    # One instance, so migrating on start cannot race another replica.
-    dockerCommand: sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # One instance, so migrating on start cannot race another replica. No
+    # quotes: Render passes everything after "sh -c" as one argument verbatim.
+    dockerCommand: sh -c alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     healthCheckPath: /health
     buildFilter:
       paths:
