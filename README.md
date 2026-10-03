@@ -105,6 +105,32 @@ which after a power cut leaves the gates down until someone logs in:
 sudo systemctl enable docker.service containerd.service
 ```
 
+### Demo: Vercel (frontend) and Render (API)
+
+For showing Aegis without a server. **Not for a working gate**: the free Render
+API sleeps when idle and its free database is deleted after 30 days.
+
+1. **Render:** New → Blueprint → this repository. `render.yaml` creates the
+   API, PostgreSQL and Key Value; enter the Vercel URL for `CORS_ORIGINS`. If
+   the API's address is not `aegis-api.onrender.com`, update it in
+   `frontend/vercel.json` (rewrite and CSP) and in `VITE_WS_URL` below.
+2. **Vercel:** import the repository with root directory `frontend`, and set
+   `VITE_API_URL=/api/v1` and `VITE_WS_URL=wss://aegis-api.onrender.com/api/v1`.
+3. **First administrator**, from `backend/api_server`, with the database's
+   external URL from Render:
+
+   ```bash
+   DATABASE_URL='<external URL>' .venv/bin/python -m app.cli create-user \
+     --email admin@example.com --name "Admin" --role admin
+   ```
+
+Vercel passes `/api` through to Render, so the browser sees one site and the
+sign-in cookie works. The alert WebSocket goes to Render directly (Vercel does
+not proxy WebSockets); it authenticates with a short-lived ticket, not the
+cookie. Every browser reaches Render through Vercel's few addresses, so the
+per-address login limit is off there (`LOGIN_IP_MAX_ATTEMPTS=0`); the
+per-account limit still applies.
+
 ## Local development
 
 ```bash

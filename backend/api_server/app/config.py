@@ -21,6 +21,13 @@ class Settings(BaseSettings):
         description="SQLAlchemy database URL.",
     )
 
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg(cls, value: str) -> str:
+        # Hosts such as Render hand out postgres:// or postgresql:// URLs, which
+        # SQLAlchemy maps to psycopg2; only psycopg (3) is installed.
+        return re.sub(r"^postgres(ql)?://", "postgresql+psycopg://", value)
+
     # Signing key for access and refresh tokens. There is deliberately no usable
     # default: a shared fallback secret would let anyone mint valid tokens.
     secret_key: str = Field(default="", min_length=0)

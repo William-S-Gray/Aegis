@@ -1,0 +1,60 @@
+# Render Blueprint: the API, PostgreSQL and Key Value (Redis), for a DEMO.
+#
+# Free plans: the API sleeps after 15 minutes idle (about a minute to wake) and
+# the free database is deleted after 30 days. Not for a working gate; switch
+# the plans to paid ones for that.
+#
+# The frontend is on Vercel and reaches this API through its /api rewrite
+# (frontend/vercel.json), so set CORS_ORIGINS to the Vercel URL when prompted.
+
+services:
+  - type: web
+    name: aegis-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/api_server/Dockerfile
+    dockerContext: ./backend/api_server
+    # One instance, so migrating on start cannot race another replica.
+    dockerCommand: sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - backend/api_server/**
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aegis-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: aegis-kv
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      # /metrics is public without one.
+      - key: METRICS_TOKEN
+        generateValue: true
+      # Every browser arrives through Vercel's few addresses, so a per-address
+      # limit would lock everyone out together. The per-account limit stays.
+      - key: LOGIN_IP_MAX_ATTEMPTS
+        value: "0"
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: keyvalue
+    name: aegis-kv
+    plan: free
+    # Empty: reachable only from services in this Render account.
+    ipAllowList: []
+
+databases:
+  - name: aegis-db
+    plan: free
+    databaseName: aegis
+    user: aegis
+    postgresMajorVersion: "16"
