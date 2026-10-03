@@ -1,4 +1,5 @@
 import json
+import time
 
 import pytest
 from sqlalchemy import select
@@ -144,7 +145,10 @@ class TestSignedRequest:
         monkeypatch.setattr(barrier._opener, "open", fake_open)
 
         assert barrier.open_barrier("http://relay.test/open", "s3cret", 3.0, alert_id="a1", plate="AAA5329", site_id=None)
-        assert json.loads(sent["body"])["plate"] == "AAA5329"
+        sent_body = json.loads(sent["body"])
+        assert sent_body["plate"] == "AAA5329"
+        # Signed along with the rest, so the relay can refuse a replayed request.
+        assert abs(sent_body["timestamp"] - time.time()) < 5
         assert sent["signature"] == barrier.sign(sent["body"], "s3cret")
         assert sent["timeout"] == 3.0
 

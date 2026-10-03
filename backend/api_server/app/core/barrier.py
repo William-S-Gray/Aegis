@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 import urllib.error
 import urllib.request
 
@@ -35,7 +36,11 @@ def sign(body: bytes, secret: str) -> str:
 
 def open_barrier(url: str, secret: str, timeout: float, *, alert_id: str, plate: str, site_id: str | None) -> bool:
     """True only when the controller answered 2xx within the timeout."""
-    body = json.dumps({"action": "open", "alert_id": alert_id, "plate": plate, "site_id": site_id}).encode()
+    # The timestamp is signed with the rest, so the relay can refuse a captured
+    # request replayed later; alert_id lets it refuse a replay inside the window.
+    body = json.dumps(
+        {"action": "open", "alert_id": alert_id, "plate": plate, "site_id": site_id, "timestamp": int(time.time())}
+    ).encode()
     request = urllib.request.Request(
         url,
         data=body,

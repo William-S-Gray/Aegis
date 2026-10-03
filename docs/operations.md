@@ -253,16 +253,24 @@ POST <BARRIER_OPEN_URL>
 Content-Type: application/json
 X-Aegis-Signature: <hex HMAC-SHA256 of the body, keyed with BARRIER_SECRET>
 
-{"action": "open", "alert_id": "…", "plate": "AAA5329", "site_id": null}
+{"action": "open", "alert_id": "…", "plate": "AAA5329", "site_id": null, "timestamp": 1790000000}
 ```
 
-The relay must **verify the signature** before opening, and refuse otherwise:
+The relay must **verify the signature**, then refuse a stale or repeated
+request, before opening. Otherwise anyone who captured one request on the
+network could replay it to open the gate later:
 
 ```python
-import hashlib, hmac
+import hashlib, hmac, json, time
 expected = hmac.new(SECRET.encode(), body, hashlib.sha256).hexdigest()
 if not hmac.compare_digest(expected, request.headers["X-Aegis-Signature"]):
     reject()
+msg = json.loads(body)
+if abs(time.time() - msg["timestamp"]) > 30:  # needs the relay's clock in sync (NTP)
+    reject()
+if msg["alert_id"] in seen_recently:  # each alert opens the gate once
+    reject()
+seen_recently.add(msg["alert_id"])  # keep at least 60 s worth
 ```
 
 Put the relay on the same isolated network as the cameras (see
