@@ -3,58 +3,80 @@ import { API_BASE_URL } from '../config';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  // The refresh cookie is scoped to /api/v1/auth, so it goes nowhere else.
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-const SESSION_KEYS = ['token', 'user', 'refresh_token'] as const;
+/*
+ * R-002: the 15-minute access token lives only in this module's memory, and
+ * the 7-day refresh token only in an httpOnly cookie the API sets, so no
+ * script can read either from storage. A reload gets a new access token from
+ * the cookie. The user profile (not a credential) stays in localStorage so a
+ * guard can still use the console while offline.
+ */
+let accessToken: string | null = null;
 
-/** Every credential goes, including the 7-day refresh token. */
-export const clearSession = () => SESSION_KEYS.forEach((key) => localStorage.removeItem(key));
+export const setAccessToken = (token: string | null) => {
+  accessToken = token;
+};
+export const getAccessToken = () => accessToken;
+
+/** Sent with cookie-based refresh and logout; a cross-site page cannot add it. */
+export const CSRF_HEADERS = { 'X-Aegis-CSRF': '1' };
+
+// 'token' and 'refresh_token' are from before the cookie session; removed on
+// sight so an upgraded browser keeps no credential in storage.
+const SESSION_KEYS = ['user', 'token', 'refresh_token'] as const;
+
+/** Every credential goes. The cookie is revoked by /auth/logout. */
+export const clearSession = () => {
+  accessToken = null;
+  SESSION_KEYS.forEach((key) => localStorage.removeItem(key));
+};
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 
 // Endpoints whose 401 means "wrong credentials", not "access token expired".
-const NO_REFRESH = ['/auth/login', '/auth/refresh'];
+const NO_REFRESH = ['/auth/login', '/auth/refresh', '/auth/logout'];
+
+/**
+ * A new access token from the refresh cookie. Refresh tokens rotate and the
+ * cookie is shared by every tab, so tabs take turns (Web Locks): a second tab
+ * then refreshes with the already-rotated cookie instead of a spent one.
+ */
+export async function refreshSession(): Promise<{ access_token: string; user: unknown }> {
+  const run = async () => {
+    // Bare axios: the shared instance's interceptor would recurse on a 401.
+    const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, {
+      headers: CSRF_HEADERS,
+      withCredentials: true,
+    });
+    accessToken = data.access_token;
+    localStorage.setItem('user', JSON.stringify(data.user));
+    return data;
+  };
+  return navigator.locks ? navigator.locks.request('aegis-refresh', run) : run();
+}
 
 let refreshing: Promise<string> | null = null;
 
-async function refreshAccessToken(): Promise<string> {
-  const refreshToken = localStorage.getItem('refresh_token');
-  if (!refreshToken) throw new Error('No refresh token');
-  // Bare axios: the shared instance's interceptor would recurse on a 401.
-  const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-    refresh_token: refreshToken,
-  });
-  localStorage.setItem('token', data.access_token);
-  localStorage.setItem('refresh_token', data.refresh_token);
-  localStorage.setItem('user', JSON.stringify(data.user));
-  return data.access_token;
-}
-
-/**
- * A fresh access token for a request that was refused with `usedToken`.
- *
- * Refresh tokens rotate, so two tabs refreshing with the same one would sign
- * the slower tab out. If another tab has already stored a newer token, use it
- * instead of refreshing again.
- */
-async function freshToken(usedToken: string | undefined): Promise<string> {
-  const current = localStorage.getItem('token');
-  if (current && `Bearer ${current}` !== usedToken) return current;
-  // Single flight: ten parallel 401s trigger one refresh.
-  refreshing ??= refreshAccessToken().finally(() => {
-    refreshing = null;
-  });
+/** Single flight: ten parallel 401s trigger one refresh. */
+function freshToken(): Promise<string> {
+  refreshing ??= refreshSession()
+    .then((data) => data.access_token)
+    .finally(() => {
+      refreshing = null;
+    });
   return refreshing;
 }
 
 // Attach the bearer token to every outgoing request.
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (accessToken && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
   return config;
 });
@@ -91,7 +113,7 @@ api.interceptors.response.use(
     ) {
       original._retried = true;
       try {
-        const token = await freshToken(original.headers?.Authorization as string | undefined);
+        const token = await freshToken();
         original.headers.Authorization = `Bearer ${token}`;
         return await api(original);
       } catch (retryError) {

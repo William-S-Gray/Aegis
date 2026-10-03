@@ -111,6 +111,11 @@ which uses no Actions minutes; see [docs/operations.md](docs/operations.md#ci-on
 
 - Argon2id password hashing; short-lived access tokens with rotating refresh
   tokens stored only as SHA-256 digests.
+- **No credential in browser storage.** The 15-minute access token lives in
+  memory. The 7-day refresh token is an httpOnly, Secure, SameSite=Strict
+  cookie scoped to `/api/v1/auth`. A cookie-based refresh also needs an
+  `X-Aegis-CSRF` header, which a cross-site page cannot send. Scripts and the
+  vision service keep body tokens.
 - **Authorisation is enforced server-side on every endpoint.** The frontend
   route guard controls rendering only.
 - Data is scoped by role, not merely gated: a plain user's queries return only

@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
+    # The browser's refresh-token cookie is Secure. Browsers accept that on
+    # https and on http://localhost; set false only to test over plain http on
+    # another host name.
+    refresh_cookie_secure: bool = True
 
     # Comma-separated origins permitted to call the API. Kept as a string
     # because pydantic-settings JSON-parses list fields read from .env before

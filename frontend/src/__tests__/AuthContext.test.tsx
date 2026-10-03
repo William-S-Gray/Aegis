@@ -65,7 +65,6 @@ describe('AuthProvider with mock auth enabled', () => {
     await act(() => result.current.login('guard@aegis.example', 'guard123'));
 
     expect(result.current.user).toMatchObject({ email: 'guard@aegis.example', role: 'guard' });
-    expect(localStorage.getItem('token')).toBeTruthy();
   });
 });
 
@@ -84,7 +83,10 @@ describe('AuthProvider against the real API', () => {
     await act(() => result.current.login('a@b.c', 'pw'));
 
     expect(result.current.user).toMatchObject({ role: 'guard' });
-    expect(localStorage.getItem('token')).toBe('jwt-token');
+    expect(api.post).toHaveBeenCalledWith('/auth/login', { email: 'a@b.c', password: 'pw', session: 'cookie' });
+    // R-002: the token is held in memory, never in storage.
+    expect((await import('../api')).getAccessToken()).toBe('jwt-token');
+    expect(localStorage.getItem('token')).toBeNull();
   });
 
   it('surfaces the server error message on a rejected login', async () => {
@@ -105,29 +107,27 @@ describe('AuthProvider against the real API', () => {
     expect(localStorage.getItem('token')).toBeNull();
   });
 
-  it('stores the refresh token and revokes it on logout', async () => {
+  it('revokes the cookie session on logout and forgets the token', async () => {
     vi.resetModules();
     vi.stubEnv('VITE_ENABLE_MOCK_AUTH', 'false');
-    const api = (await import('../api')).default;
-    vi.spyOn(api, 'post').mockResolvedValue({
-      data: {
-        access_token: 'jwt-token',
-        refresh_token: 'refresh-value',
-        user: { id: 'u1', email: 'a@b.c', role: 'admin' },
-      },
+    const apiModule = await import('../api');
+    vi.spyOn(apiModule.default, 'post').mockResolvedValue({
+      data: { access_token: 'jwt-token', refresh_token: null, user: { id: 'u1', email: 'a@b.c', role: 'admin' } },
     } as never);
 
     const { AuthProvider, useAuth } = await import('../context/AuthContext');
     const { result } = renderHook(() => useAuth(), { wrapper: wrapperFor(AuthProvider) });
 
     await act(() => result.current.login('a@b.c', 'pw'));
-    expect(localStorage.getItem('refresh_token')).toBe('refresh-value');
-
     await act(async () => result.current.logout());
 
-    expect(localStorage.getItem('refresh_token')).toBeNull();
-    expect(localStorage.getItem('token')).toBeNull();
-    expect(api.post).toHaveBeenCalledWith('/auth/logout', { refresh_token: 'refresh-value' });
+    expect(apiModule.getAccessToken()).toBeNull();
+    expect(localStorage.getItem('user')).toBeNull();
+    expect(apiModule.default.post).toHaveBeenCalledWith(
+      '/auth/logout',
+      {},
+      { headers: { 'X-Aegis-CSRF': '1', Authorization: 'Bearer jwt-token' } }
+    );
   });
 
   it('throws when the server response is malformed', async () => {
@@ -144,37 +144,51 @@ describe('AuthProvider against the real API', () => {
   });
 });
 
-describe('session restoration', () => {
-  it('ignores a stored user whose role was tampered with', async () => {
-    localStorage.setItem('user', JSON.stringify({ id: 'x', email: 'e@f.g', role: 'superadmin' }));
-    localStorage.setItem('token', 'some-token');
+describe('session restoration (real API)', () => {
+  const profile = { id: 'x', email: 'e@f.g', role: 'admin' };
 
-    const { AuthProvider, useAuth } = await loadAuth(true);
+  async function restoreWith(refresh: () => Promise<unknown>) {
+    vi.resetModules();
+    vi.stubEnv('VITE_ENABLE_MOCK_AUTH', 'false');
+    const apiModule = await import('../api');
+    vi.spyOn(apiModule, 'refreshSession').mockImplementation(refresh as never);
+    const { AuthProvider, useAuth } = await import('../context/AuthContext');
     const { result } = renderHook(() => useAuth(), { wrapper: wrapperFor(AuthProvider) });
-
     await waitFor(() => expect(result.current.isInitializing).toBe(false));
+    return result;
+  }
+
+  it('signs in from the refresh cookie, whatever is stored', async () => {
+    const result = await restoreWith(async () => ({ access_token: 't', user: { ...profile, role: 'guard' } }));
+
+    expect(result.current.user).toMatchObject({ role: 'guard' });
+  });
+
+  it('a stored profile alone does not sign anyone in', async () => {
+    localStorage.setItem('user', JSON.stringify(profile));
+    localStorage.setItem('token', 'legacy-token');
+
+    const result = await restoreWith(async () => Promise.reject({ response: { status: 401 } }));
+
     expect(result.current.user).toBeNull();
     expect(localStorage.getItem('user')).toBeNull();
+    expect(localStorage.getItem('token')).toBeNull();
   });
 
-  it('ignores a stored user with no accompanying token', async () => {
-    localStorage.setItem('user', JSON.stringify({ id: 'x', email: 'e@f.g', role: 'admin' }));
+  it('keeps a guard signed in offline from the stored profile', async () => {
+    localStorage.setItem('user', JSON.stringify(profile));
 
-    const { AuthProvider, useAuth } = await loadAuth(true);
-    const { result } = renderHook(() => useAuth(), { wrapper: wrapperFor(AuthProvider) });
+    const result = await restoreWith(async () => Promise.reject(new Error('Network Error')));
 
-    await waitFor(() => expect(result.current.isInitializing).toBe(false));
-    expect(result.current.user).toBeNull();
-  });
-
-  it('restores a well-formed session', async () => {
-    localStorage.setItem('user', JSON.stringify({ id: 'x', email: 'e@f.g', role: 'admin' }));
-    localStorage.setItem('token', 'good-token');
-
-    const { AuthProvider, useAuth } = await loadAuth(true);
-    const { result } = renderHook(() => useAuth(), { wrapper: wrapperFor(AuthProvider) });
-
-    await waitFor(() => expect(result.current.isInitializing).toBe(false));
     expect(result.current.user).toMatchObject({ role: 'admin' });
+  });
+
+  it('ignores a stored profile whose role was tampered with, even offline', async () => {
+    localStorage.setItem('user', JSON.stringify({ ...profile, role: 'superadmin' }));
+
+    const result = await restoreWith(async () => Promise.reject(new Error('Network Error')));
+
+    expect(result.current.user).toBeNull();
+    expect(localStorage.getItem('user')).toBeNull();
   });
 });

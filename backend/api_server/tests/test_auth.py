@@ -253,3 +253,73 @@ class TestTokenPrimitives:
         assert raw != digest
         assert len(digest) == 64
         assert expires_at > datetime.now(timezone.utc) + timedelta(days=6)
+
+
+class TestBrowserCookieSession:
+    """R-002: a browser's refresh token lives only in an httpOnly cookie."""
+
+    CSRF = {"X-Aegis-CSRF": "1"}
+
+    def _login(self, client, make_user):
+        make_user(email="guard@aegis.example", password=PASSWORD, role=Role.GUARD)
+        return client.post(
+            "/api/v1/auth/login",
+            json={"email": "guard@aegis.example", "password": PASSWORD, "session": "cookie"},
+        )
+
+    @staticmethod
+    def _cookie(response) -> str:
+        header = response.headers["set-cookie"]
+        return header.split(";", 1)[0].split("=", 1)[1]
+
+    def _refresh(self, client, token, headers=CSRF):
+        # Sent by hand: the test client will not send a Secure cookie over http.
+        return client.post("/api/v1/auth/refresh", headers={**headers, "Cookie": f"aegis_refresh={token}"})
+
+    def test_login_puts_the_refresh_token_in_an_httponly_cookie_only(self, client, make_user):
+        response = self._login(client, make_user)
+
+        assert response.status_code == 200
+        assert response.json()["refresh_token"] is None
+        cookie = response.headers["set-cookie"].lower()
+        for attribute in ("httponly", "secure", "samesite=strict", "path=/api/v1/auth", "max-age=604800"):
+            assert attribute in cookie
+
+    def test_refresh_with_the_cookie_rotates_it(self, client, make_user):
+        first = self._cookie(self._login(client, make_user))
+
+        refreshed = self._refresh(client, first)
+
+        assert refreshed.status_code == 200
+        assert refreshed.json()["access_token"] and refreshed.json()["refresh_token"] is None
+        second = self._cookie(refreshed)
+        assert second != first
+        assert self._refresh(client, first).status_code == 401  # the old one is spent
+
+    def test_a_cookie_without_the_csrf_header_is_ignored(self, client, make_user):
+        token = self._cookie(self._login(client, make_user))
+
+        assert self._refresh(client, token, headers={}).status_code == 401
+        assert self._refresh(client, token).status_code == 200  # still valid
+
+    def test_logout_revokes_the_cookie_session_and_clears_it(self, client, make_user):
+        login = self._login(client, make_user)
+        token = self._cookie(login)
+
+        out = client.post(
+            "/api/v1/auth/logout",
+            headers={**self.CSRF, "Cookie": f"aegis_refresh={token}",
+                     "Authorization": f"Bearer {login.json()['access_token']}"},
+        )
+
+        assert out.status_code == 204
+        assert 'aegis_refresh=""' in out.headers["set-cookie"] and "max-age=0" in out.headers["set-cookie"].lower()
+        assert self._refresh(client, token).status_code == 401
+
+    def test_api_clients_keep_body_tokens_and_get_no_cookie(self, client, make_user):
+        make_user(email="svc@aegis.example", password=PASSWORD, role=Role.SERVICE)
+
+        response = client.post("/api/v1/auth/login", json={"email": "svc@aegis.example", "password": PASSWORD})
+
+        assert response.json()["refresh_token"]
+        assert "set-cookie" not in response.headers
