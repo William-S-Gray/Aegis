@@ -132,6 +132,15 @@ cookie. Every browser reaches Render through Vercel's few addresses, so the
 per-address login limit is off there (`LOGIN_IP_MAX_ATTEMPTS=0`); the
 per-account limit still applies.
 
+Sample data for an empty demo (vehicles, a guard and a camera account, and
+alerts covering each verdict), through the public API:
+
+```bash
+cd backend/api_server
+AEGIS_ADMIN_EMAIL=... AEGIS_ADMIN_PASSWORD=... .venv/bin/python -m tools.seed_demo \
+  https://<your-app>.vercel.app --credentials-out ~/aegis-demo-accounts.txt
+```
+
 ## Local development
 
 ```bash
