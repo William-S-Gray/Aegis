@@ -11,6 +11,7 @@ from app.models import (
     FeedbackStatus,
     MismatchType,
     Role,
+    User,
     Vehicle,
 )
 
@@ -222,6 +223,61 @@ class TestUsers:
         assert client.get("/api/v1/auth/me", headers=victim_headers).status_code == 200
         assert client.delete(f"/api/v1/users/{victim.id}", headers=admin).status_code == 200
         assert client.get("/api/v1/auth/me", headers=victim_headers).status_code == 401
+
+    def test_admin_resets_a_password_and_old_sessions_end(self, client, auth, make_user, db):
+        admin = auth(Role.ADMIN)
+        guard = make_user(email="forgetful@aegis.example", password=PASSWORD, role=Role.GUARD)
+        old = client.post("/api/v1/auth/login", json={"email": "forgetful@aegis.example", "password": PASSWORD}).json()
+
+        new_password = "a-brand-new-passphrase"
+        assert client.post(f"/api/v1/users/{guard.id}/password", headers=admin, json={"password": new_password}).status_code == 204
+
+        login = lambda pw: client.post("/api/v1/auth/login", json={"email": "forgetful@aegis.example", "password": pw})
+        assert login(PASSWORD).status_code == 401
+        assert login(new_password).status_code == 200
+        # A device that was signed in cannot quietly carry on.
+        assert client.post("/api/v1/auth/refresh", json={"refresh_token": old["refresh_token"]}).status_code == 401
+        entry = db.scalar(select(AuditLog).where(AuditLog.action == "user.password_reset"))
+        assert new_password not in str(entry.details)
+
+    def test_password_reset_needs_an_admin_and_a_strong_password(self, client, auth, make_user):
+        guard_headers = auth(Role.GUARD)
+        target = make_user(email="target@aegis.example", password=PASSWORD, role=Role.GUARD)
+        url = f"/api/v1/users/{target.id}/password"
+        assert client.post(url, headers=guard_headers, json={"password": "a-brand-new-passphrase"}).status_code == 403
+        assert client.post(url, headers=auth(Role.ADMIN), json={"password": "short"}).status_code == 422
+
+    def test_permanent_delete_removes_the_account_and_keeps_the_audit_trail(self, client, auth, make_user, db):
+        admin = auth(Role.ADMIN)
+        victim = make_user(email="leaver@aegis.example", password=PASSWORD, role=Role.GUARD)
+        victim_id = victim.id
+
+        assert client.delete(f"/api/v1/users/{victim_id}?permanent=true", headers=admin).status_code == 200
+
+        db.expire_all()
+        assert db.get(User, victim_id) is None
+        assert client.post("/api/v1/auth/login", json={"email": "leaver@aegis.example", "password": PASSWORD}).status_code == 401
+        entry = db.scalar(select(AuditLog).where(AuditLog.action == "user.deleted"))
+        assert entry.details["email"] == "leaver@aegis.example"
+
+    def test_a_deleted_guards_decisions_are_kept_without_the_name(self, client, auth, make_user, db):
+        admin = auth(Role.ADMIN)
+        guard = make_user(email="leaver@aegis.example", password=PASSWORD, role=Role.GUARD)
+        token = client.post("/api/v1/auth/login", json={"email": "leaver@aegis.example", "password": PASSWORD}).json()
+        recorded = client.post("/api/v1/access-logs", headers={"Authorization": f"Bearer {token['access_token']}"},
+                               json={"plate_number": "AB12CDE", "action": "approve"})
+        assert recorded.status_code == 201
+
+        assert client.delete(f"/api/v1/users/{guard.id}?permanent=true", headers=admin).status_code == 200
+
+        db.expire_all()
+        decision = db.scalar(select(AccessLog).where(AccessLog.plate_number == "AB12CDE"))
+        assert decision is not None and decision.action.value == "approve"
+
+    def test_admin_cannot_permanently_delete_themselves(self, client, auth):
+        headers = auth(Role.ADMIN, email="boss@aegis.example")
+        me = client.get("/api/v1/auth/me", headers=headers).json()
+        assert client.delete(f"/api/v1/users/{me['id']}?permanent=true", headers=headers).status_code == 400
 
 
 class TestVehicles:

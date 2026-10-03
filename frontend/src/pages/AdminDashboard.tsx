@@ -60,6 +60,8 @@ import api from '../api';
 import { mockAuthEnabled } from '../config';
 import WatchlistManager from '../components/WatchlistManager';
 import VisitHistory from '../components/VisitHistory';
+import UserAccountActions from '../components/UserAccountActions';
+import { useAuth } from '../context/AuthContext';
 import { asArray, asObject, asNumber, apiMessage } from '../utils/safe';
 
 interface User {
@@ -145,6 +147,7 @@ const AdminDashboard: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
+  const { user: currentUser } = useAuth();
   const [loadingUsers, setLoadingUsers] = useState(false);
 
   // Vehicle Management
@@ -295,6 +298,15 @@ const AdminDashboard: React.FC = () => {
       onClose();
     } catch (error) {
       toast({ title: 'Error', description: apiMessage(error, 'Failed to save user'), status: 'error' });
+    }
+  };
+  const handleUserReactivate = async (id: string) => {
+    try {
+      const { data } = await api.patch<User>(`/users/${id}`, { is_active: true });
+      setUsers(prev => prev.map(u => (u.id === id ? data : u)));
+      toast({ title: 'User reactivated', status: 'success' });
+    } catch (error) {
+      toast({ title: 'Error', description: apiMessage(error, 'Failed to reactivate user'), status: 'error' });
     }
   };
   const handleUserDeactivate = async (id: string) => {
@@ -812,11 +824,22 @@ const AdminDashboard: React.FC = () => {
                         <Td>
                           <HStack spacing={2}>
                             <Button size="xs" onClick={() => openEditUser(u)}>Edit</Button>
-                            {u.is_active && (
-                              <Button size="xs" colorScheme="red" onClick={() => handleUserDeactivate(u.id)}>
-                                Deactivate
+                            {u.is_active ? (
+                              u.id !== currentUser?.id && (
+                                <Button size="xs" colorScheme="orange" variant="outline" onClick={() => handleUserDeactivate(u.id)}>
+                                  Deactivate
+                                </Button>
+                              )
+                            ) : (
+                              <Button size="xs" colorScheme="green" variant="outline" onClick={() => handleUserReactivate(u.id)}>
+                                Reactivate
                               </Button>
                             )}
+                            <UserAccountActions
+                              user={u}
+                              isSelf={u.id === currentUser?.id}
+                              onDeleted={(id) => setUsers(prev => prev.filter(x => x.id !== id))}
+                            />
                           </HStack>
                         </Td>
                       </Tr>

@@ -7,6 +7,10 @@ import type { AxiosRequestConfig } from 'axios';
 import AdminDashboard from '../pages/AdminDashboard';
 import api from '../api';
 
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'me', role: 'admin' } }),
+}));
+
 describe('AdminDashboard', () => {
   it('shows alerts and access decisions from the API, never sample figures', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (url: string, config?: AxiosRequestConfig) => {

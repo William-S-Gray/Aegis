@@ -34,6 +34,12 @@ class UserCreate(BaseModel):
         return value.strip().lower()
 
 
+class PasswordReset(BaseModel):
+    """An administrator setting a new password for someone else."""
+
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)
+
+
 class UserUpdate(BaseModel):
     """Partial update. Password changes go through a dedicated flow."""
 
