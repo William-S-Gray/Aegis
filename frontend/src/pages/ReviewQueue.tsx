@@ -233,7 +233,6 @@ const ReviewQueue: React.FC = () => {
             borderRadius="xl"
             border="1px solid"
             borderColor="gray.200"
-            boxShadow="6px 6px 12px #d1d5db, -6px -6px 12px #ffffff"
           >
             <Flex justify="space-between" align="flex-start" wrap="wrap" gap={3} mb={3}>
               <Box>

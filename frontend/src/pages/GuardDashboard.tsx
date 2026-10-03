@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Box, Heading, VStack, useToast, Button, Text, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, Badge, HStack,
-  Grid, Card, CardBody, CardHeader, Flex, Spacer,
+  Grid, Card, CardBody, CardHeader, Flex, Spacer, Stack,
   Progress, Icon, useColorModeValue,
   FormControl, FormLabel, Input, Select, Textarea
 } from '@chakra-ui/react';
@@ -12,6 +12,7 @@ import OnSiteNow from '../components/OnSiteNow';
 import db, { newClientRef } from '../db';
 import api from '../api';
 import { apiMessage, asArray } from '../utils/safe';
+import { mismatchLabel, mismatchScheme } from '../utils/labels';
 import { startOfflineSync } from '../services/OfflineSyncService';
 import {
   FiActivity, FiAlertTriangle, FiCheckCircle, FiXCircle,
@@ -48,15 +49,6 @@ const toPercent = (value: number) => Math.round(value * 100);
 const confidenceScheme = (value: number) =>
   value > 0.8 ? 'green' : value > 0.6 ? 'yellow' : 'red';
 
-// Why the alert fired is the signal a guard acts on, so it drives the styling.
-const MISMATCH_LABEL: Record<string, string> = {
-  none: 'Matches register',
-  type: 'Vehicle type mismatch',
-  color: 'Colour mismatch',
-  unregistered: 'Unregistered plate',
-  visitor: 'Expected visitor',
-  watchlist: 'WATCHLIST',
-};
 
 const RECENT_LIMIT = 10;
 
@@ -67,6 +59,8 @@ const GuardDashboard: React.FC = () => {
   const [pending, setPending] = useState<Alert[]>([]);
   const alert = pending[0] ?? null;
   const dismissCurrent = () => setPending((prev) => prev.slice(1));
+  // Moves the current vehicle to the back of the queue; nothing is discarded.
+  const deferCurrent = () => setPending((prev) => (prev.length > 1 ? [...prev.slice(1), prev[0]] : prev));
   const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
   const [wsStatus, setWsStatus] = useState('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
@@ -237,7 +231,7 @@ const GuardDashboard: React.FC = () => {
     };
     try {
       await api.post('/access-logs', log);
-      toast({ title: `Action ${action} sent`, status: 'success' });
+      toast({ title: action === 'approve' ? `${current.plate_number} let in` : `${current.plate_number} turned away`, status: 'success' });
     } catch (err) {
       if ((err as { response?: unknown }).response) {
         // The server answered and refused. That is not an offline case, and
@@ -255,15 +249,7 @@ const GuardDashboard: React.FC = () => {
     dismissCurrent();
   };
 
-  const getStatusColor = (mismatch: string) => {
-    switch (mismatch) {
-      case 'none': return 'green';
-      case 'visitor': return 'blue';
-      case 'watchlist': return 'red';
-      case 'unregistered': return 'red';
-      default: return 'orange';
-    }
-  };
+  const getStatusColor = mismatchScheme;
 
   const getStatusIcon = (mismatch: string) => {
     switch (mismatch) {
@@ -291,7 +277,7 @@ const GuardDashboard: React.FC = () => {
 
       toast({
         title: 'Alert raised',
-        description: `${data.plate_number}: ${MISMATCH_LABEL[data.mismatch_type] ?? data.mismatch_type}`,
+        description: `${data.plate_number}: ${mismatchLabel(data.mismatch_type)}`,
         status: data.mismatch_type === 'none' ? 'success' : 'warning',
       });
       onManualScanClose();
@@ -350,7 +336,7 @@ const GuardDashboard: React.FC = () => {
     <Box p={{ base: 4, md: 8 }} bg="gray.50" minH="100vh">
       {/* Header */}
       <Flex direction={{ base: 'column', md: 'row' }} mb={6} align={{ base: 'start', md: 'center' }}>
-        <Heading size="lg" mb={{ base: 4, md: 0 }}>Guard Dashboard</Heading>
+        <Heading size="lg" mb={{ base: 4, md: 0 }}>Gate</Heading>
         <Spacer />
         <HStack spacing={4}>
           <Badge 
@@ -369,7 +355,146 @@ const GuardDashboard: React.FC = () => {
       </Flex>
 
 
-      <CameraPanel />
+      {/* At the gate: the vehicle waiting for a decision */}
+      {alert ? (
+        <Card
+          mb={6}
+          border="2px"
+          borderColor={`${getStatusColor(alert.mismatch_type)}.400`}
+          boxShadow="lg"
+          aria-live="assertive"
+        >
+          <CardHeader pb={0}>
+            <Flex align="center" wrap="wrap" gap={3}>
+              <Text fontSize="sm" fontWeight="bold" color="gray.500" textTransform="uppercase" letterSpacing="wide">
+                At the gate
+              </Text>
+              {pending.length > 1 && (
+                <Badge colorScheme="orange" fontSize="sm">
+                  +{pending.length - 1} waiting
+                </Badge>
+              )}
+            </Flex>
+            <Heading as="h2" size="2xl" fontFamily="mono" letterSpacing="wider" mt={1}>
+              {alert.plate_number}
+            </Heading>
+          </CardHeader>
+          <CardBody>
+            {alert && (
+              <VStack spacing={3} align="stretch" maxW="xl">
+                <HStack justify="space-between">
+                  <Text fontWeight="bold">Status:</Text>
+                  <Badge colorScheme={getStatusColor(alert.mismatch_type)} size="lg">
+                    {mismatchLabel(alert.mismatch_type)}
+                  </Badge>
+                </HStack>
+                
+                <HStack justify="space-between">
+                  <Text fontWeight="bold">Detected:</Text>
+                  <Text>
+                    {[alert.detected_color, alert.detected_type].filter(Boolean).join(' ') || '—'}
+                  </Text>
+                </HStack>
+
+                <HStack justify="space-between">
+                  <Text fontWeight="bold">Registered:</Text>
+                  <Text>
+                    {[alert.registered_color, alert.registered_type].filter(Boolean).join(' ') ||
+                      'Not registered'}
+                  </Text>
+                </HStack>
+
+                {typeof alert.plate_confidence === 'number' && (
+                  <HStack justify="space-between">
+                    <Text fontWeight="bold">Plate confidence:</Text>
+                    <Text>{toPercent(alert.plate_confidence)}%</Text>
+                  </HStack>
+                )}
+
+                {alert.watchlist_entry && (
+                  <Box p={3} bg="red.600" borderRadius="md">
+                    <Text color="white" fontWeight="bold">
+                      WATCHLIST: {alert.watchlist_entry.reason}
+                    </Text>
+                    <Text color="white" fontSize="sm">
+                      Follow the site procedure for this reason. Do not confront the driver alone.
+                    </Text>
+                  </Box>
+                )}
+
+                {alert.visitor_pass && (
+                  <Box p={3} bg="blue.50" border="1px" borderColor="blue.200" borderRadius="md">
+                    <Text color="blue.800" fontSize="sm">
+                      Expected visitor: <b>{alert.visitor_pass.visitor_name}</b>
+                      {alert.visitor_pass.host_name ? ` for ${alert.visitor_pass.host_name}` : ''}
+                      {`, pass valid until ${new Date(alert.visitor_pass.valid_until).toLocaleString()}.`}
+                    </Text>
+                  </Box>
+                )}
+
+                {!['none', 'visitor', 'watchlist'].includes(alert.mismatch_type) && (
+                  <Box p={3} bg="red.50" border="1px" borderColor="red.200" borderRadius="md">
+                    <Text color="red.800" fontSize="sm">
+                      {mismatchLabel(alert.mismatch_type)}
+                      {alert.mismatch_type === 'unregistered'
+                        ? ' — this plate is not in the register.'
+                        : ' — detected attributes differ from the registered vehicle.'}
+                    </Text>
+                  </Box>
+                )}
+              </VStack>
+            )}
+            <Stack direction={{ base: 'column', sm: 'row' }} spacing={3} mt={6}>
+              <Button
+                colorScheme="green"
+                size="lg"
+                h={16}
+                flex={1}
+                fontSize="xl"
+                leftIcon={<FiCheckCircle />}
+                onClick={() => handleAction('approve')}
+              >
+                Let in
+              </Button>
+              <Button
+                colorScheme="red"
+                size="lg"
+                h={16}
+                flex={1}
+                fontSize="xl"
+                leftIcon={<FiXCircle />}
+                onClick={() => handleAction('deny')}
+              >
+                Turn away
+              </Button>
+            </Stack>
+            {pending.length > 1 && (
+              <Button variant="ghost" size="sm" mt={3} onClick={deferCurrent}>
+                Decide later (move to the back of the queue)
+              </Button>
+            )}
+          </CardBody>
+        </Card>
+      ) : (
+        <Flex
+          mb={6}
+          p={4}
+          bg="white"
+          border="1px"
+          borderColor={borderColor}
+          borderRadius="lg"
+          align="center"
+          gap={3}
+        >
+          <Icon as={FiActivity} color={wsStatus === 'connected' ? 'green.500' : 'gray.400'} />
+          <Text color="gray.600">
+            {wsStatus === 'connected'
+              ? 'No vehicle waiting. New arrivals appear here with a sound.'
+              : 'Reconnecting to live alerts…'}
+          </Text>
+        </Flex>
+      )}
+
 
       {/* Main Content Grid */}
       <Grid templateColumns={{ base: '1fr', lg: '2fr 1fr' }} gap={6}>
@@ -406,7 +531,7 @@ const GuardDashboard: React.FC = () => {
                         />
                         <Text fontWeight="bold" fontSize="lg">{alert.plate_number}</Text>
                         <Badge colorScheme={getStatusColor(alert.mismatch_type)} variant="subtle">
-                          {MISMATCH_LABEL[alert.mismatch_type] ?? alert.mismatch_type}
+                          {mismatchLabel(alert.mismatch_type)}
                         </Badge>
                         {alert.auto_opened && (
                           <Badge colorScheme="green" variant="solid">
@@ -467,23 +592,6 @@ const GuardDashboard: React.FC = () => {
         <VStack spacing={6} align="stretch">
           <OnSiteNow />
 
-          {/* Connection Status */}
-          <Card bg={bgColor} border="1px" borderColor={borderColor}>
-            <CardHeader>
-              <Heading size="sm">System Status</Heading>
-            </CardHeader>
-            <CardBody>
-              <VStack spacing={3} align="stretch">
-                <HStack justify="space-between">
-                  <Text fontSize="sm">WebSocket</Text>
-                  <Badge colorScheme={wsStatus === 'connected' ? 'green' : 'red'}>
-                    {wsStatus}
-                  </Badge>
-                </HStack>
-              </VStack>
-            </CardBody>
-          </Card>
-
           {/* Quick Actions */}
           <Card bg={bgColor} border="1px" borderColor={borderColor}>
             <CardHeader>
@@ -501,10 +609,9 @@ const GuardDashboard: React.FC = () => {
                   _hover={{
                     bg: 'blue.50',
                     color: 'blue.600',
-                    boxShadow: '4px 4px 8px #bfdbfe, -4px -4px 8px #ffffff',
                   }}
                 >
-                  Manual Scan
+                  Check a plate by hand
                 </Button>
                 <Button 
                   variant="neumorphic"
@@ -516,10 +623,9 @@ const GuardDashboard: React.FC = () => {
                   _hover={{
                     bg: 'orange.50',
                     color: 'orange.600',
-                    boxShadow: '4px 4px 8px #fed7aa, -4px -4px 8px #ffffff',
                   }}
                 >
-                  System Override
+                  Record a manual decision
                 </Button>
               </VStack>
             </CardBody>
@@ -527,97 +633,9 @@ const GuardDashboard: React.FC = () => {
         </VStack>
       </Grid>
 
-      {/* Alert Modal */}
-      <Modal isOpen={pending.length > 0} onClose={dismissCurrent} size="lg">
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>
-            New Alert - {alert?.plate_number}
-            {pending.length > 1 && (
-              <Badge ml={3} colorScheme="orange">
-                +{pending.length - 1} waiting
-              </Badge>
-            )}
-          </ModalHeader>
-          <ModalBody>
-            {alert && (
-              <VStack spacing={4} align="stretch">
-                <HStack justify="space-between">
-                  <Text fontWeight="bold">Status:</Text>
-                  <Badge colorScheme={getStatusColor(alert.mismatch_type)} size="lg">
-                    {MISMATCH_LABEL[alert.mismatch_type] ?? alert.mismatch_type}
-                  </Badge>
-                </HStack>
-                
-                <HStack justify="space-between">
-                  <Text fontWeight="bold">Detected:</Text>
-                  <Text>
-                    {[alert.detected_color, alert.detected_type].filter(Boolean).join(' ') || '—'}
-                  </Text>
-                </HStack>
-
-                <HStack justify="space-between">
-                  <Text fontWeight="bold">Registered:</Text>
-                  <Text>
-                    {[alert.registered_color, alert.registered_type].filter(Boolean).join(' ') ||
-                      'Not registered'}
-                  </Text>
-                </HStack>
-
-                {typeof alert.plate_confidence === 'number' && (
-                  <HStack justify="space-between">
-                    <Text fontWeight="bold">Plate confidence:</Text>
-                    <Text>{toPercent(alert.plate_confidence)}%</Text>
-                  </HStack>
-                )}
-
-                {alert.watchlist_entry && (
-                  <Box p={3} bg="red.600" borderRadius="md">
-                    <Text color="white" fontWeight="bold">
-                      WATCHLIST: {alert.watchlist_entry.reason}
-                    </Text>
-                    <Text color="white" fontSize="sm">
-                      Follow the site procedure for this reason. Do not confront the driver alone.
-                    </Text>
-                  </Box>
-                )}
-
-                {alert.visitor_pass && (
-                  <Box p={3} bg="blue.50" border="1px" borderColor="blue.200" borderRadius="md">
-                    <Text color="blue.800" fontSize="sm">
-                      Expected visitor: <b>{alert.visitor_pass.visitor_name}</b>
-                      {alert.visitor_pass.host_name ? ` for ${alert.visitor_pass.host_name}` : ''}
-                      {`, pass valid until ${new Date(alert.visitor_pass.valid_until).toLocaleString()}.`}
-                    </Text>
-                  </Box>
-                )}
-
-                {!['none', 'visitor', 'watchlist'].includes(alert.mismatch_type) && (
-                  <Box p={3} bg="red.50" border="1px" borderColor="red.200" borderRadius="md">
-                    <Text color="red.800" fontSize="sm">
-                      {MISMATCH_LABEL[alert.mismatch_type] ?? alert.mismatch_type}
-                      {alert.mismatch_type === 'unregistered'
-                        ? ' — this plate is not in the register.'
-                        : ' — detected attributes differ from the registered vehicle.'}
-                    </Text>
-                  </Box>
-                )}
-              </VStack>
-            )}
-          </ModalBody>
-          <ModalFooter>
-            <Button colorScheme="green" mr={3} onClick={() => handleAction('approve')}>
-              Approve
-            </Button>
-            <Button colorScheme="red" mr={3} onClick={() => handleAction('deny')}>
-              Deny
-            </Button>
-            <Button variant="ghost" onClick={dismissCurrent}>
-              Close
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      <Box mt={6}>
+        <CameraPanel />
+      </Box>
 
       {/* Audio element for alerts */}
       <audio ref={audioRef} src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT" />
@@ -627,11 +645,10 @@ const GuardDashboard: React.FC = () => {
         <ModalOverlay />
         <ModalContent
           borderRadius="xl"
-          boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
           border="1px solid"
           borderColor="gray.200"
         >
-          <ModalHeader color="gray.700">Manual License Plate Scan</ModalHeader>
+          <ModalHeader color="gray.700">Check a plate by hand</ModalHeader>
           <ModalBody>
             <VStack spacing={4}>
               <FormControl isRequired>
@@ -641,11 +658,9 @@ const GuardDashboard: React.FC = () => {
                   onChange={(e) => setManualScanData(prev => ({ ...prev, plateNumber: e.target.value }))}
                   placeholder="Enter plate number"
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'blue.400',
                   }}
                 />
@@ -656,11 +671,9 @@ const GuardDashboard: React.FC = () => {
                   value={manualScanData.location}
                   onChange={(e) => setManualScanData(prev => ({ ...prev, location: e.target.value }))}
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'blue.400',
                   }}
                 >
@@ -677,11 +690,9 @@ const GuardDashboard: React.FC = () => {
                   onChange={(e) => setManualScanData(prev => ({ ...prev, notes: e.target.value }))}
                   placeholder="Additional notes..."
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'blue.400',
                   }}
                 />
@@ -700,7 +711,6 @@ const GuardDashboard: React.FC = () => {
                 _hover={{
                   bg: 'blue.50',
                   color: 'blue.600',
-                  boxShadow: '6px 6px 12px #bfdbfe, -6px -6px 12px #ffffff',
                 }}
               >
                 Initiate Scan
@@ -715,11 +725,10 @@ const GuardDashboard: React.FC = () => {
         <ModalOverlay />
         <ModalContent
           borderRadius="xl"
-          boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
           border="1px solid"
           borderColor="gray.200"
         >
-          <ModalHeader color="gray.700">System Override</ModalHeader>
+          <ModalHeader color="gray.700">Record a manual decision</ModalHeader>
           <ModalBody>
             <VStack spacing={4}>
               <FormControl isRequired>
@@ -729,11 +738,9 @@ const GuardDashboard: React.FC = () => {
                   onChange={(e) => setOverrideData(prev => ({ ...prev, plateNumber: e.target.value }))}
                   placeholder="Enter plate number"
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'orange.400',
                   }}
                 />
@@ -744,11 +751,9 @@ const GuardDashboard: React.FC = () => {
                   value={overrideData.action}
                   onChange={(e) => setOverrideData(prev => ({ ...prev, action: e.target.value }))}
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'orange.400',
                   }}
                 >
@@ -764,11 +769,9 @@ const GuardDashboard: React.FC = () => {
                   onChange={(e) => setOverrideData(prev => ({ ...prev, reason: e.target.value }))}
                   placeholder="Explain why you're overriding the system decision..."
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'orange.400',
                   }}
                 />
@@ -787,7 +790,6 @@ const GuardDashboard: React.FC = () => {
                 _hover={{
                   bg: 'orange.50',
                   color: 'orange.600',
-                  boxShadow: '6px 6px 12px #fed7aa, -6px -6px 12px #ffffff',
                 }}
               >
                 Apply Override

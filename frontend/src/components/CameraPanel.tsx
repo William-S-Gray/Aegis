@@ -112,7 +112,9 @@ const CameraPanel: React.FC = () => {
             bg="gray.900"
             borderRadius="xl"
             overflow="hidden"
-            minH="400px"
+            // Full height only with a picture; an empty black box pushed the
+            // alerts off the first screen.
+            minH={frameUrl ? '400px' : '160px'}
             display="flex"
             alignItems="center"
             justifyContent="center"

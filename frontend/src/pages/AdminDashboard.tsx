@@ -63,6 +63,7 @@ import VisitHistory from '../components/VisitHistory';
 import UserAccountActions from '../components/UserAccountActions';
 import { useAuth } from '../context/AuthContext';
 import { asArray, asObject, asNumber, apiMessage } from '../utils/safe';
+import { decisionLabel, decisionScheme, mismatchLabel, mismatchScheme } from '../utils/labels';
 
 interface User {
   id: string;
@@ -108,11 +109,12 @@ interface RecentAlert {
   timestamp: string;
 }
 
+// null until loaded: a "0" while loading reads as "there are none".
 interface Analytics {
-  totalVehicles: number;
-  totalLogs: number;
+  totalVehicles: number | null;
+  totalLogs: number | null;
   weeklyGrowth: number;
-  pendingAlerts: number;
+  pendingAlerts: number | null;
 }
 
 /*
@@ -148,7 +150,7 @@ const AdminDashboard: React.FC = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
   const { user: currentUser } = useAuth();
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
   // Vehicle Management
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -163,10 +165,10 @@ const AdminDashboard: React.FC = () => {
 
   // Analytics
   const [analytics, setAnalytics] = useState<Analytics>({
-    totalVehicles: 0,
-    totalLogs: 0,
+    totalVehicles: null,
+    totalLogs: null,
     weeklyGrowth: 0,
-    pendingAlerts: 0
+    pendingAlerts: null
   });
 
   // Responsive design
@@ -400,7 +402,6 @@ const AdminDashboard: React.FC = () => {
           bg="white"
           p={6}
           borderRadius="2xl"
-          boxShadow="8px 8px 16px #d1d5db, -8px -8px 16px #ffffff"
           border="1px solid"
           borderColor="gray.200"
         >
@@ -432,7 +433,6 @@ const AdminDashboard: React.FC = () => {
                 _hover={{
                   bg: 'brand.50',
                   color: 'brand.600',
-                  boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
                 }}
               >
                 Refresh
@@ -448,14 +448,8 @@ const AdminDashboard: React.FC = () => {
           bg={cardBg}
           p={6}
           borderRadius="xl"
-          boxShadow="6px 6px 12px #d1d5db, -6px -6px 12px #ffffff"
           border="1px solid"
           borderColor="gray.200"
-          _hover={{
-            boxShadow: '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff',
-            transform: 'translateY(-2px)',
-            transition: 'all 0.3s ease',
-          }}
         >
           <HStack spacing={4}>
             <Box
@@ -466,7 +460,6 @@ const AdminDashboard: React.FC = () => {
               display="flex"
               alignItems="center"
               justifyContent="center"
-              boxShadow="inset 4px 4px 8px #bae6fd, inset -4px -4px 8px #ffffff"
               border="1px solid"
               borderColor="brand.200"
             >
@@ -475,7 +468,7 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {users.length}
+                  {loadingUsers && users.length === 0 ? '—' : users.length}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Total Users</StatLabel>
               </Stat>
@@ -487,14 +480,8 @@ const AdminDashboard: React.FC = () => {
           bg={cardBg}
           p={6}
           borderRadius="xl"
-          boxShadow="6px 6px 12px #d1d5db, -6px -6px 12px #ffffff"
           border="1px solid"
           borderColor="gray.200"
-          _hover={{
-            boxShadow: '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff',
-            transform: 'translateY(-2px)',
-            transition: 'all 0.3s ease',
-          }}
         >
           <HStack spacing={4}>
             <Box
@@ -505,7 +492,6 @@ const AdminDashboard: React.FC = () => {
               display="flex"
               alignItems="center"
               justifyContent="center"
-              boxShadow="inset 4px 4px 8px #bbf7d0, inset -4px -4px 8px #ffffff"
               border="1px solid"
               borderColor="green.200"
             >
@@ -514,7 +500,7 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {analytics.totalVehicles}
+                  {analytics.totalVehicles ?? '—'}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Registered Vehicles</StatLabel>
               </Stat>
@@ -526,14 +512,8 @@ const AdminDashboard: React.FC = () => {
           bg={cardBg}
           p={6}
           borderRadius="xl"
-          boxShadow="6px 6px 12px #d1d5db, -6px -6px 12px #ffffff"
           border="1px solid"
           borderColor="gray.200"
-          _hover={{
-            boxShadow: '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff',
-            transform: 'translateY(-2px)',
-            transition: 'all 0.3s ease',
-          }}
         >
           <HStack spacing={4}>
             <Box
@@ -544,7 +524,6 @@ const AdminDashboard: React.FC = () => {
               display="flex"
               alignItems="center"
               justifyContent="center"
-              boxShadow="inset 4px 4px 8px #fecaca, inset -4px -4px 8px #ffffff"
               border="1px solid"
               borderColor="red.200"
             >
@@ -553,7 +532,7 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {analytics.pendingAlerts}
+                  {analytics.pendingAlerts ?? '—'}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Pending Alerts</StatLabel>
               </Stat>
@@ -565,14 +544,8 @@ const AdminDashboard: React.FC = () => {
           bg={cardBg}
           p={6}
           borderRadius="xl"
-          boxShadow="6px 6px 12px #d1d5db, -6px -6px 12px #ffffff"
           border="1px solid"
           borderColor="gray.200"
-          _hover={{
-            boxShadow: '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff',
-            transform: 'translateY(-2px)',
-            transition: 'all 0.3s ease',
-          }}
         >
           <HStack spacing={4}>
             <Box
@@ -583,7 +556,6 @@ const AdminDashboard: React.FC = () => {
               display="flex"
               alignItems="center"
               justifyContent="center"
-              boxShadow="inset 4px 4px 8px #e9d5ff, inset -4px -4px 8px #ffffff"
               border="1px solid"
               borderColor="purple.200"
             >
@@ -592,7 +564,7 @@ const AdminDashboard: React.FC = () => {
             <VStack align="start" spacing={1}>
               <Stat>
                 <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
-                  {analytics.totalLogs}
+                  {analytics.totalLogs ?? '—'}
                 </StatNumber>
                 <StatLabel color="gray.600" fontSize="sm">Recent Activities</StatLabel>
               </Stat>
@@ -608,7 +580,6 @@ const AdminDashboard: React.FC = () => {
         <Box
           bg={cardBg}
           borderRadius="xl"
-          boxShadow="8px 8px 16px #d1d5db, -8px -8px 16px #ffffff"
           border="1px solid"
           borderColor="gray.200"
           overflow="hidden"
@@ -633,23 +604,21 @@ const AdminDashboard: React.FC = () => {
                   borderColor="gray.200"
                   _hover={{
                     bg: 'gray.100',
-                    transform: 'translateY(-1px)',
-                    transition: 'all 0.2s ease',
                   }}
                 >
                   <HStack justify="space-between" mb={2}>
                     <HStack spacing={2}>
-                      <Icon as={FiAlertTriangle} color="red.500" />
+                      <Icon as={FiAlertTriangle} color={`${mismatchScheme(alert.mismatch_type)}.500`} />
                       <Text fontWeight="semibold" color="gray.700">
                         {alert.plate_number}
                       </Text>
                     </HStack>
                     <Badge colorScheme={getStatusColor(alert.status)} variant="subtle">
-                      {alert.status.replace('_', ' ')}
+                      {{ open: 'Open', in_progress: 'In progress', closed: 'Closed' }[alert.status] ?? alert.status}
                     </Badge>
                   </HStack>
                   <HStack spacing={4} fontSize="sm" color="gray.600">
-                    <Text>{alert.mismatch_type === 'none' ? 'No mismatch' : `Mismatch: ${alert.mismatch_type}`}</Text>
+                    <Text>{mismatchLabel(alert.mismatch_type)}</Text>
                     <HStack spacing={1}>
                       <Icon as={FiClock} />
                       <Text>{new Date(alert.timestamp).toLocaleString()}</Text>
@@ -666,7 +635,6 @@ const AdminDashboard: React.FC = () => {
         <Box
           bg={cardBg}
           borderRadius="xl"
-          boxShadow="8px 8px 16px #d1d5db, -8px -8px 16px #ffffff"
           border="1px solid"
           borderColor="gray.200"
           overflow="hidden"
@@ -692,9 +660,9 @@ const AdminDashboard: React.FC = () => {
                       <Text fontWeight="semibold" color="gray.700">
                         {log.plate_number}
                       </Text>
-                      <Text fontSize="sm" color="gray.600">
-                        {log.action}
-                      </Text>
+                      <Badge colorScheme={decisionScheme(log.action)} variant="subtle">
+                        {decisionLabel(log.action)}
+                      </Badge>
                     </VStack>
                     <Text fontSize="xs" color="gray.500">
                       {new Date(log.timestamp).toLocaleString()}
@@ -714,7 +682,6 @@ const AdminDashboard: React.FC = () => {
         bg={cardBg}
         p={6}
         borderRadius="xl"
-        boxShadow="8px 8px 16px #d1d5db, -8px -8px 16px #ffffff"
         border="1px solid"
         borderColor="gray.200"
       >
@@ -727,7 +694,6 @@ const AdminDashboard: React.FC = () => {
             _hover={{
               bg: 'brand.50',
               color: 'brand.600',
-              boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
             }}
           >
             Add User
@@ -739,7 +705,6 @@ const AdminDashboard: React.FC = () => {
             _hover={{
               bg: 'brand.50',
               color: 'brand.600',
-              boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
             }}
           >
             Register Vehicle
@@ -751,7 +716,6 @@ const AdminDashboard: React.FC = () => {
             _hover={{
               bg: 'brand.50',
               color: 'brand.600',
-              boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
             }}
           >
             System Reports
@@ -763,7 +727,6 @@ const AdminDashboard: React.FC = () => {
             _hover={{
               bg: 'brand.50',
               color: 'brand.600',
-              boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
             }}
           >
             Refresh Data
@@ -928,10 +891,9 @@ const AdminDashboard: React.FC = () => {
                   <Thead>
                     <Tr>
                       <Th>Plate</Th>
-                      <Th>Action</Th>
-                      <Th>Timestamp</Th>
-                      <Th>Guard</Th>
-                      <Th>Vehicle ID</Th>
+                      <Th>Decision</Th>
+                      <Th>When</Th>
+                      <Th>By</Th>
                     </Tr>
                   </Thead>
                   <Tbody>
@@ -939,13 +901,12 @@ const AdminDashboard: React.FC = () => {
                       <Tr key={log.id}>
                         <Td fontWeight="bold">{log.plate_number}</Td>
                         <Td>
-                          <Badge colorScheme={log.action === 'Entry' ? 'green' : 'red'} variant="subtle">
-                            {log.action}
+                          <Badge colorScheme={decisionScheme(log.action)} variant="subtle">
+                            {decisionLabel(log.action)}
                           </Badge>
                         </Td>
                         <Td>{new Date(log.timestamp).toLocaleString()}</Td>
-                        <Td>{log.user_id}</Td>
-                        <Td>{log.vehicle_id}</Td>
+                        <Td>{users.find(u => u.id === log.user_id)?.full_name ?? '—'}</Td>
                       </Tr>
                     ))}
                   </Tbody>
@@ -967,7 +928,6 @@ const AdminDashboard: React.FC = () => {
         <ModalOverlay />
         <ModalContent
           borderRadius="xl"
-          boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
           border="1px solid"
           borderColor="gray.200"
         >
@@ -983,11 +943,9 @@ const AdminDashboard: React.FC = () => {
                   value={userForm.full_name}
                   onChange={handleUserFormChange}
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'brand.400',
                   }}
                 />
@@ -1001,11 +959,9 @@ const AdminDashboard: React.FC = () => {
                   value={userForm.email}
                   onChange={handleUserFormChange}
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'brand.400',
                   }}
                 />
@@ -1020,11 +976,9 @@ const AdminDashboard: React.FC = () => {
                     value={userForm.password}
                     onChange={handleUserFormChange}
                     borderRadius="lg"
-                    boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                     border="1px solid"
                     borderColor="gray.200"
                     _focus={{
-                      boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                       borderColor: 'brand.400',
                     }}
                   />
@@ -1037,11 +991,9 @@ const AdminDashboard: React.FC = () => {
                   value={userForm.role}
                   onChange={handleUserFormChange}
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'brand.400',
                   }}
                 >
@@ -1064,7 +1016,6 @@ const AdminDashboard: React.FC = () => {
                 _hover={{
                   bg: 'brand.50',
                   color: 'brand.600',
-                  boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
                 }}
               >
                 {editingUser ? 'Update' : 'Create'}
@@ -1079,7 +1030,6 @@ const AdminDashboard: React.FC = () => {
         <ModalOverlay />
         <ModalContent
           borderRadius="xl"
-          boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
           border="1px solid"
           borderColor="gray.200"
         >
@@ -1095,11 +1045,9 @@ const AdminDashboard: React.FC = () => {
                   value={vehicleForm.plate_number}
                   onChange={handleVehicleFormChange}
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'brand.400',
                   }}
                 />
@@ -1111,11 +1059,9 @@ const AdminDashboard: React.FC = () => {
                   value={vehicleForm.make}
                   onChange={handleVehicleFormChange}
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'brand.400',
                   }}
                 />
@@ -1127,11 +1073,9 @@ const AdminDashboard: React.FC = () => {
                   value={vehicleForm.model}
                   onChange={handleVehicleFormChange}
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'brand.400',
                   }}
                 />
@@ -1143,11 +1087,9 @@ const AdminDashboard: React.FC = () => {
                   value={vehicleForm.color}
                   onChange={handleVehicleFormChange}
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'brand.400',
                   }}
                 />
@@ -1190,7 +1132,6 @@ const AdminDashboard: React.FC = () => {
                 _hover={{
                   bg: 'brand.50',
                   color: 'brand.600',
-                  boxShadow: '6px 6px 12px #bae6fd, -6px -6px 12px #ffffff',
                 }}
               >
                 {editingVehicle ? 'Update' : 'Register'}

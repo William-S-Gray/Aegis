@@ -39,7 +39,6 @@ const Home: React.FC = () => {
           bg="white"
           p={8}
           borderRadius="2xl"
-          boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
           border="1px solid"
           borderColor="gray.200"
           maxW="4xl"
@@ -72,7 +71,6 @@ const Home: React.FC = () => {
               _hover={{
                 bg: 'brand.50',
                 color: 'brand.600',
-                boxShadow: '8px 8px 16px #bae6fd, -8px -8px 16px #ffffff',
               }}
             >
               Get Started
@@ -89,7 +87,6 @@ const Home: React.FC = () => {
                   _hover={{
                     bg: 'brand.50',
                     color: 'brand.600',
-                    boxShadow: '8px 8px 16px #bae6fd, -8px -8px 16px #ffffff',
                   }}
                 >
                   Admin Dashboard
@@ -105,7 +102,6 @@ const Home: React.FC = () => {
                   _hover={{
                     bg: 'brand.50',
                     color: 'brand.600',
-                    boxShadow: '8px 8px 16px #bae6fd, -8px -8px 16px #ffffff',
                   }}
                 >
                   Guard Dashboard
@@ -121,7 +117,6 @@ const Home: React.FC = () => {
                   _hover={{
                     bg: 'brand.50',
                     color: 'brand.600',
-                    boxShadow: '8px 8px 16px #bae6fd, -8px -8px 16px #ffffff',
                   }}
                 >
                   User Portal
@@ -157,15 +152,9 @@ const Home: React.FC = () => {
               bg="white"
               p={6}
               borderRadius="xl"
-              boxShadow="8px 8px 16px #d1d5db, -8px -8px 16px #ffffff"
               border="1px solid"
               borderColor="gray.200"
               textAlign="center"
-              _hover={{
-                boxShadow: '12px 12px 20px #cbd5e1, -12px -12px 20px #ffffff',
-                transform: 'translateY(-4px)',
-                transition: 'all 0.3s ease',
-              }}
             >
               <Box
                 w={16}
@@ -177,7 +166,6 @@ const Home: React.FC = () => {
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
-                boxShadow="inset 4px 4px 8px #bae6fd, inset -4px -4px 8px #ffffff"
                 border="1px solid"
                 borderColor="brand.200"
               >
