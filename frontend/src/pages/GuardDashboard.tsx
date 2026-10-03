@@ -39,6 +39,8 @@ interface Alert {
   status: 'open' | 'in_progress' | 'closed';
   feedback_status: string;
   timestamp: string;
+  /** The barrier opened automatically: no decision is needed. */
+  auto_opened?: boolean;
 }
 
 // The API reports confidence as 0-1; the UI shows whole percentages.
@@ -191,7 +193,8 @@ const GuardDashboard: React.FC = () => {
         if (message.type !== 'alert' || !message.alert) return;
 
         const incoming = message.alert;
-        setPending((prev) => [...prev, incoming]);
+        // Already let in by the barrier: listed, but nothing for the guard to decide.
+        if (!incoming.auto_opened) setPending((prev) => [...prev, incoming]);
         setRecentAlerts((prev) =>
           [incoming, ...prev.filter((a) => a.id !== incoming.id)].slice(0, RECENT_LIMIT)
         );
@@ -405,6 +408,11 @@ const GuardDashboard: React.FC = () => {
                         <Badge colorScheme={getStatusColor(alert.mismatch_type)} variant="subtle">
                           {MISMATCH_LABEL[alert.mismatch_type] ?? alert.mismatch_type}
                         </Badge>
+                        {alert.auto_opened && (
+                          <Badge colorScheme="green" variant="solid">
+                            Opened automatically
+                          </Badge>
+                        )}
                       </HStack>
                       <Text fontSize="sm" color="gray.500">
                         {new Date(alert.timestamp).toLocaleTimeString()}

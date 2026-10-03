@@ -58,6 +58,9 @@ services:
       PLATE_AUTO_ACCEPT_CONFIDENCE: ${PLATE_AUTO_ACCEPT_CONFIDENCE:-0.85}
       PLATE_AUTO_ACCEPT_MIN_WIDTH: ${PLATE_AUTO_ACCEPT_MIN_WIDTH:-120}
       PLATE_FORMATS: ${PLATE_FORMATS:-}
+      # Automatic barrier; see docs/operations.md. Unset = every vehicle waits for a guard.
+      BARRIER_OPEN_URL: ${BARRIER_OPEN_URL:-}
+      BARRIER_SECRET: ${BARRIER_SECRET:-}
     ports:
       - "${API_PORT:-8081}:8000"
     depends_on:

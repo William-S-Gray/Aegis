@@ -311,6 +311,8 @@ class AlertPublic(BaseModel):
     watchlist_entry: WatchlistSummary | None = None
     # Review queue only: registered plates one character from this read.
     suggested_plates: list[str] = []
+    # Set on the live notification when the barrier was opened automatically.
+    auto_opened: bool = False
 
     comments: list[AlertCommentPublic] = []
 

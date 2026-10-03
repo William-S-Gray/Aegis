@@ -8,12 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core import audit, metrics
+from app.core import audit, barrier, metrics
 from app.core.deps import require_alert_publisher, require_guard
 from app.core.ws_manager import manager
 from app.services import visits
 from app.database import get_db
 from app.models import (
+    AccessAction,
+    AccessLog,
     Alert,
     AlertComment,
     AlertStatus,
@@ -415,6 +417,53 @@ def list_alerts(
     )
 
 
+def _auto_open(db: Session, request: Request, alert: Alert, vehicle: Vehicle | None, *, machine_read: bool) -> bool:
+    """
+    Open the barrier for a vehicle that needs no human: a camera read of an
+    active registered vehicle that matches, with nothing for review. Recorded
+    as an access decision with no guard; on failure the guard decides.
+    """
+    if not (
+        settings.barrier_open_url
+        and machine_read
+        and vehicle is not None
+        and vehicle.is_active
+        and alert.mismatch_type == MismatchType.NONE
+        and not alert.requires_review
+    ):
+        return False
+    opened = barrier.open_barrier(
+        settings.barrier_open_url,
+        settings.barrier_secret,
+        settings.barrier_timeout_seconds,
+        alert_id=str(alert.id),
+        plate=alert.plate_number,
+        site_id=str(alert.site_id) if alert.site_id else None,
+    )
+    if opened:
+        db.add(
+            AccessLog(
+                plate_number=alert.plate_number,
+                action=AccessAction.APPROVE,
+                timestamp=datetime.now(timezone.utc),
+                user_id=None,
+                vehicle_id=vehicle.id,
+                site_id=alert.site_id,
+                details={"automatic": True, "alert_id": str(alert.id)},
+            )
+        )
+    audit.record(
+        db,
+        action="barrier.auto_opened" if opened else "barrier.open_failed",
+        request=request,
+        resource_type="alert",
+        resource_id=str(alert.id),
+        details={"plate_number": alert.plate_number},
+    )
+    db.commit()
+    return opened
+
+
 @router.post("", response_model=AlertPublic, status_code=status.HTTP_201_CREATED)
 def create_alert(
     payload: AlertCreate,
@@ -502,6 +551,7 @@ def create_alert(
     metrics.observe_alert(alert.mismatch_type.value, requires_review)
 
     created = _load(db, alert.id)
+    created.auto_opened = _auto_open(db, request, created, vehicle, machine_read=current_user.role == Role.SERVICE)
     # Push to every connected guard and administrator. Delivery is best effort:
     # the alert is already durable, and a missed socket must not fail the write.
     manager.broadcast_threadsafe(
