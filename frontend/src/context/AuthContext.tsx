@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import api from '../api';
+import api, { clearSession, CSRF_HEADERS, getAccessToken, refreshSession, setAccessToken } from '../api';
 import { mockAuthEnabled } from '../config';
 
 export type Role = 'admin' | 'guard' | 'user';
@@ -23,8 +23,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const VALID_ROLES: Role[] = ['admin', 'guard', 'user'];
 const STORAGE_KEY = 'user';
-const TOKEN_KEY = 'token';
-const REFRESH_KEY = 'refresh_token';
 
 /**
  * Dev-only credential set. Enabled solely when VITE_ENABLE_MOCK_AUTH === 'true',
@@ -63,11 +61,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  const persist = useCallback((userData: User, token: string, refreshToken?: string) => {
+  // The token stays in memory; only the profile is stored (see api/index.ts).
+  const persist = useCallback((userData: User, token: string) => {
     setUser(userData);
+    setAccessToken(token);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
-    localStorage.setItem(TOKEN_KEY, token);
-    if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
   }, []);
 
   const login = useCallback(
@@ -89,7 +87,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       let response;
       try {
-        response = await api.post('/auth/login', { email: normalizedEmail, password });
+        // "cookie": the refresh token comes back only as an httpOnly cookie.
+        response = await api.post('/auth/login', { email: normalizedEmail, password, session: 'cookie' });
       } catch (error) {
         // Surface the server's message (e.g. "Invalid email or password",
         // or the 429 lockout notice) rather than a generic network error.
@@ -98,67 +97,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error(detail || 'Unable to sign in. Please try again.');
       }
 
-      const {
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        user: userData,
-      } = response.data ?? {};
+      const { access_token: accessToken, user: userData } = response.data ?? {};
 
       if (typeof accessToken !== 'string' || !isValidUser(userData)) {
         throw new Error('Malformed authentication response from server');
       }
 
-      persist(userData, accessToken, refreshToken);
+      persist(userData, accessToken);
     },
     [persist]
   );
 
   const logout = useCallback(() => {
-    const refreshToken = localStorage.getItem(REFRESH_KEY);
+    const token = getAccessToken();
 
     // Clear locally first so the UI never appears signed in while the network
     // call is in flight; revoking server-side is best effort.
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
+    clearSession();
 
-    if (!mockAuthEnabled && refreshToken) {
-      api.post('/auth/logout', { refresh_token: refreshToken }).catch(() => {
-        // Already signed out locally; nothing useful to do here.
-      });
+    if (!mockAuthEnabled) {
+      // Revokes the refresh token and clears its cookie.
+      api
+        .post('/auth/logout', {}, { headers: { ...CSRF_HEADERS, ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
+        .catch(() => {
+          // Already signed out locally; nothing useful to do here.
+        });
     }
   }, []);
 
-  // Restore a previously stored session, rejecting anything malformed or
-  // missing its token so a tampered localStorage entry cannot mint a role.
+  // Restore the session from the refresh cookie. A stored profile alone never
+  // signs anyone in: it is used only when the API cannot be reached, so a
+  // guard can keep queueing decisions offline; the server checks every request.
   useEffect(() => {
-    const storedUser = localStorage.getItem(STORAGE_KEY);
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-
-    if (storedUser && storedToken) {
+    let cancelled = false;
+    const stored = (() => {
       try {
-        const parsed: unknown = JSON.parse(storedUser);
-        if (isValidUser(parsed)) {
-          setUser(parsed);
-        } else {
-          localStorage.removeItem(STORAGE_KEY);
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(REFRESH_KEY);
-        }
+        const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+        return isValidUser(parsed) ? parsed : null;
       } catch {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(REFRESH_KEY);
+        return null;
       }
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_KEY);
-    }
+    })();
+    if (!stored) localStorage.removeItem(STORAGE_KEY);
+    // Credentials from before the cookie session must not linger.
+    localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
 
-    setIsInitializing(false);
-  }, []);
+    const restore = async () => {
+      if (mockAuthEnabled) {
+        if (stored) persist(stored, `mock-token.${stored.id}`);
+        return;
+      }
+      try {
+        const data = await refreshSession();
+        if (!cancelled && isValidUser(data.user)) setUser(data.user);
+      } catch (error) {
+        const offline = !(error as { response?: unknown })?.response;
+        if (cancelled) return;
+        if (offline && stored) setUser(stored);
+        else clearSession();
+      }
+    };
+    restore().finally(() => !cancelled && setIsInitializing(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [persist]);
 
   return (
     <AuthContext.Provider value={{ user, isInitializing, login, logout }}>

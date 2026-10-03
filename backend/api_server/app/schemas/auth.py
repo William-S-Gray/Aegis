@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.user import MAX_PASSWORD_LENGTH, UserPublic
@@ -8,6 +10,9 @@ class LoginRequest(BaseModel):
     # No minimum here: length rules belong on registration. Enforcing them at
     # login would tell an attacker which passwords are too short to be real.
     password: str = Field(max_length=MAX_PASSWORD_LENGTH)
+    # "cookie" (browsers): the refresh token goes only into an httpOnly cookie,
+    # never the body, so no script can read it. "body": API clients.
+    session: Literal["body", "cookie"] = "body"
 
     @field_validator("email")
     @classmethod
@@ -16,7 +21,8 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    # Omitted by browsers, which send the httpOnly cookie instead.
+    refresh_token: str | None = None
 
 
 class TokenResponse(BaseModel):
@@ -26,6 +32,7 @@ class TokenResponse(BaseModel):
     """
 
     access_token: str
-    refresh_token: str
+    # None in cookie mode: the token is in the httpOnly cookie only.
+    refresh_token: str | None = None
     token_type: str = "bearer"
     user: UserPublic

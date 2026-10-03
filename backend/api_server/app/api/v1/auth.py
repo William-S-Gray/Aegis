@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.core import audit, metrics
 from app.core.deps import client_ip, get_current_user
 from app.core.security import (
@@ -20,6 +21,7 @@ from app.models import RefreshToken, User
 from app.schemas import LoginRequest, RefreshRequest, TokenResponse, UserPublic
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+settings = get_settings()
 
 _INVALID_CREDENTIALS = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -33,13 +35,47 @@ _INVALID_CREDENTIALS = HTTPException(
 _DUMMY_HASH = hash_password("aegis-timing-equalizer")
 
 
-def _issue_tokens(db: Session, user: User) -> TokenResponse:
+# The browser's refresh token (R-002): httpOnly so no script can read it,
+# SameSite=Strict and scoped to the auth routes so it is sent nowhere else.
+REFRESH_COOKIE = "aegis_refresh"
+_COOKIE_PATH = "/api/v1/auth"
+# Cookie-mode refresh and logout must carry this header. A cross-site page
+# cannot add a custom header without passing CORS, which lists only our origins.
+CSRF_HEADER = "X-Aegis-CSRF"
+
+
+def _issue_tokens(db: Session, user: User, response: Response, cookie: bool) -> TokenResponse:
     raw_refresh, digest, expires_at = create_refresh_token()
     db.add(RefreshToken(user_id=user.id, token_hash=digest, expires_at=expires_at))
+    if cookie:
+        response.set_cookie(
+            REFRESH_COOKIE,
+            raw_refresh,
+            max_age=settings.refresh_token_expire_days * 86400,
+            path=_COOKIE_PATH,
+            secure=settings.refresh_cookie_secure,
+            httponly=True,
+            samesite="strict",
+        )
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
-        refresh_token=raw_refresh,
+        refresh_token=None if cookie else raw_refresh,
         user=UserPublic.model_validate(user),
+    )
+
+
+def _presented_refresh_token(payload: RefreshRequest | None, request: Request) -> tuple[str | None, bool]:
+    """(token, came from the cookie). A cookie without the CSRF header is ignored."""
+    if payload is not None and payload.refresh_token:
+        return payload.refresh_token, False
+    if request.headers.get(CSRF_HEADER) != "1":
+        return None, True
+    return request.cookies.get(REFRESH_COOKIE), True
+
+
+def _clear_cookie(response: Response) -> None:
+    response.delete_cookie(
+        REFRESH_COOKIE, path=_COOKIE_PATH, secure=settings.refresh_cookie_secure, httponly=True, samesite="strict"
     )
 
 
@@ -112,7 +148,7 @@ def login(
     login_throttle.reset(account_key)
     user.last_login_at = datetime.now(timezone.utc)
 
-    tokens = _issue_tokens(db, user)
+    tokens = _issue_tokens(db, user, response, cookie=payload.session == "cookie")
     metrics.login_attempts.labels(outcome="succeeded").inc()
     audit.record(
         db,
@@ -127,12 +163,17 @@ def login(
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(
-    payload: RefreshRequest,
     request: Request,
+    response: Response,
+    payload: RefreshRequest | None = None,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
-    digest = hash_refresh_token(payload.refresh_token)
-    stored = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == digest))
+    raw, from_cookie = _presented_refresh_token(payload, request)
+    stored = (
+        db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(raw)))
+        if raw
+        else None
+    )
 
     if stored is None or not stored.is_active:
         audit.record(db, action="auth.refresh.rejected", request=request)
@@ -150,7 +191,7 @@ def refresh(
     # Rotate: the presented token is retired as the replacement is issued, so a
     # stolen refresh token is usable at most once.
     stored.revoked_at = datetime.now(timezone.utc)
-    tokens = _issue_tokens(db, user)
+    tokens = _issue_tokens(db, user, response, cookie=from_cookie)
     audit.record(
         db,
         action="auth.refresh.succeeded",
@@ -164,13 +205,20 @@ def refresh(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
-    payload: RefreshRequest,
     request: Request,
+    response: Response,
+    payload: RefreshRequest | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    digest = hash_refresh_token(payload.refresh_token)
-    stored = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == digest))
+    raw, from_cookie = _presented_refresh_token(payload, request)
+    if from_cookie:
+        _clear_cookie(response)
+    stored = (
+        db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(raw)))
+        if raw
+        else None
+    )
 
     # Only revoke a token that belongs to the caller.
     if stored is not None and stored.user_id == current_user.id:

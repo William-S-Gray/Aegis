@@ -58,7 +58,7 @@ describe('response interceptor', () => {
 });
 
 describe('token refresh', () => {
-  type Config = { url?: string; headers: Record<string, string> };
+  type Config = { url?: string; headers: Record<string, string>; withCredentials?: boolean };
   const ok = (config: Config, data: unknown) => ({
     data,
     status: 200,
@@ -75,23 +75,22 @@ describe('token refresh', () => {
   async function loadWith(adapter: (config: Config) => Promise<unknown>) {
     vi.resetModules();
     const axios = (await import('axios')).default;
-    const api = (await import('../api')).default;
+    const module = await import('../api');
     axios.defaults.adapter = adapter as never;
-    api.defaults.adapter = adapter as never;
-    return api;
+    module.default.defaults.adapter = adapter as never;
+    module.setAccessToken('expired');
+    return module;
   }
 
-  it('refreshes an expired access token once and retries the request', async () => {
-    localStorage.setItem('token', 'expired');
-    localStorage.setItem('refresh_token', 'r1');
-    const seen: string[] = [];
+  it('refreshes from the cookie once, retries, and stores no credential', async () => {
+    const refreshCalls: Config[] = [];
 
-    const api = await loadWith(async (config) => {
-      seen.push(`${config.url} ${config.headers.Authorization ?? ''}`.trim());
+    const mod = await loadWith(async (config) => {
       if (config.url?.endsWith('/auth/refresh')) {
+        refreshCalls.push(config);
         return ok(config, {
           access_token: 'fresh',
-          refresh_token: 'r2',
+          refresh_token: null,
           user: { id: 'u1', email: 'g@aegis.example', role: 'guard' },
         });
       }
@@ -99,23 +98,24 @@ describe('token refresh', () => {
       return ok(config, { ok: true });
     });
 
-    const { data } = await api.get('/vehicles');
+    const { data } = await mod.default.get('/vehicles');
 
     expect(data).toEqual({ ok: true });
-    expect(localStorage.getItem('token')).toBe('fresh');
-    expect(localStorage.getItem('refresh_token')).toBe('r2');
-    expect(seen.filter((line) => line.endsWith('/auth/refresh'))).toHaveLength(1);
+    expect(mod.getAccessToken()).toBe('fresh');
+    expect(refreshCalls).toHaveLength(1);
+    expect(refreshCalls[0].headers['X-Aegis-CSRF']).toBe('1');
+    expect(refreshCalls[0].withCredentials).toBe(true);
+    // R-002: nothing a script could steal is left in storage.
+    expect(Object.keys(localStorage)).toEqual(['user']);
   });
 
   it('parallel expiries trigger a single refresh', async () => {
-    localStorage.setItem('token', 'expired');
-    localStorage.setItem('refresh_token', 'r1');
     let refreshes = 0;
 
-    const api = await loadWith(async (config) => {
+    const { default: api } = await loadWith(async (config) => {
       if (config.url?.endsWith('/auth/refresh')) {
         refreshes += 1;
-        return ok(config, { access_token: 'fresh', refresh_token: 'r2', user: {} });
+        return ok(config, { access_token: 'fresh', user: {} });
       }
       if (config.headers.Authorization === 'Bearer expired') throw unauthorized(config);
       return ok(config, {});
@@ -126,24 +126,23 @@ describe('token refresh', () => {
     expect(refreshes).toBe(1);
   });
 
-  it('clears every credential, refresh token included, when refresh fails', async () => {
-    localStorage.setItem('token', 'expired');
+  it('signs out completely when the refresh cookie is refused', async () => {
     localStorage.setItem('user', '{}');
-    localStorage.setItem('refresh_token', 'revoked');
+    localStorage.setItem('refresh_token', 'legacy');
 
-    const api = await loadWith(async (config) => {
+    const mod = await loadWith(async (config) => {
       throw unauthorized(config);
     });
 
-    await expect(api.get('/vehicles')).rejects.toBeDefined();
-    expect(localStorage.getItem('token')).toBeNull();
+    await expect(mod.default.get('/vehicles')).rejects.toBeDefined();
+    expect(mod.getAccessToken()).toBeNull();
     expect(localStorage.getItem('user')).toBeNull();
     expect(localStorage.getItem('refresh_token')).toBeNull();
   });
 
   it('a failed login is not treated as an expired session', async () => {
     let refreshes = 0;
-    const api = await loadWith(async (config) => {
+    const { default: api } = await loadWith(async (config) => {
       if (config.url?.endsWith('/auth/refresh')) refreshes += 1;
       throw unauthorized(config);
     });
