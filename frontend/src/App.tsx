@@ -18,8 +18,15 @@ const UserPortal = React.lazy(() => import('./pages/UserPortal'));
 const Login = React.lazy(() => import('./pages/Login'));
 const Home = React.lazy(() => import('./pages/Home'));
 
-// Neumorphism theme
+// Clean, high-contrast theme. Chakra's defaults do most of the work; the
+// overrides keep surfaces flat and quiet so verdict colours stand out.
 const theme = extendTheme({
+  fonts: {
+    // The system UI font everywhere: nothing to download, native on each device.
+    heading: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    body: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    mono: 'ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace',
+  },
   colors: {
     brand: {
       50: '#f0f9ff',
@@ -44,14 +51,13 @@ const theme = extendTheme({
       700: '#334155',
       800: '#1e293b',
       900: '#0f172a',
-    }
+    },
   },
   styles: {
     global: {
       body: {
-        bg: 'gray.100',
+        bg: 'gray.50',
         color: 'gray.800',
-        fontFamily: 'Inter, system-ui, sans-serif',
       },
     },
   },
@@ -61,14 +67,9 @@ const theme = extendTheme({
         container: {
           bg: 'white',
           borderRadius: 'xl',
-          boxShadow: '8px 8px 16px #d1d5db, -8px -8px 16px #ffffff',
           border: '1px solid',
           borderColor: 'gray.200',
-          _hover: {
-            boxShadow: '12px 12px 20px #cbd5e1, -12px -12px 20px #ffffff',
-            transform: 'translateY(-2px)',
-            transition: 'all 0.3s ease',
-          },
+          boxShadow: 'sm',
         },
       },
     },
@@ -76,103 +77,39 @@ const theme = extendTheme({
       baseStyle: {
         borderRadius: 'lg',
         fontWeight: 'semibold',
-        _focus: {
-          boxShadow: 'inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff',
-        },
       },
       variants: {
-        solid: {
-          bg: 'white',
-          color: 'gray.700',
-          boxShadow: '4px 4px 8px #d1d5db, -4px -4px 8px #ffffff',
-          border: '1px solid',
-          borderColor: 'gray.200',
-          _hover: {
-            bg: 'gray.50',
-            boxShadow: '6px 6px 12px #cbd5e1, -6px -6px 12px #ffffff',
-            transform: 'translateY(-1px)',
-          },
-          _active: {
-            boxShadow: 'inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff',
-            transform: 'translateY(0px)',
-          },
-        },
+        // Secondary actions: a quiet white button. Coloured `solid` buttons
+        // keep Chakra's colours, so Let in / Turn away read at a glance.
         neumorphic: {
           bg: 'white',
           color: 'gray.700',
-          boxShadow: '6px 6px 12px #d1d5db, -6px -6px 12px #ffffff',
           border: '1px solid',
-          borderColor: 'gray.200',
-          _hover: {
-            boxShadow: '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff',
-            transform: 'translateY(-2px)',
-          },
-          _active: {
-            boxShadow: 'inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff',
-            transform: 'translateY(0px)',
-          },
+          borderColor: 'gray.300',
+          boxShadow: 'xs',
+          _hover: { bg: 'gray.50', borderColor: 'gray.400' },
+          _active: { bg: 'gray.100' },
         },
       },
     },
     Input: {
-      baseStyle: {
-        field: {
-          bg: 'white',
-          borderRadius: 'lg',
-          boxShadow: 'inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff',
-          border: '1px solid',
-          borderColor: 'gray.200',
-          _focus: {
-            boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
-            borderColor: 'brand.400',
-          },
-        },
-      },
+      defaultProps: { focusBorderColor: 'brand.500' },
+      variants: { outline: { field: { bg: 'white' } } },
     },
     Select: {
-      baseStyle: {
-        field: {
-          bg: 'white',
-          borderRadius: 'lg',
-          boxShadow: 'inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff',
-          border: '1px solid',
-          borderColor: 'gray.200',
-          _focus: {
-            boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
-            borderColor: 'brand.400',
-          },
-        },
-      },
+      defaultProps: { focusBorderColor: 'brand.500' },
+      variants: { outline: { field: { bg: 'white' } } },
     },
-    Modal: {
-      baseStyle: {
-        dialog: {
-          bg: 'white',
-          borderRadius: 'xl',
-          boxShadow: '12px 12px 24px #d1d5db, -12px -12px 24px #ffffff',
-          border: '1px solid',
-          borderColor: 'gray.200',
-        },
-      },
+    Textarea: {
+      defaultProps: { focusBorderColor: 'brand.500' },
+      variants: { outline: { bg: 'white' } },
     },
     Badge: {
       baseStyle: {
-        borderRadius: 'full',
-        boxShadow: '2px 2px 4px #d1d5db, -2px -2px 4px #ffffff',
-        border: '1px solid',
-        borderColor: 'gray.200',
-      },
-    },
-    Stat: {
-      baseStyle: {
-        container: {
-          bg: 'white',
-          borderRadius: 'xl',
-          p: 4,
-          boxShadow: '6px 6px 12px #d1d5db, -6px -6px 12px #ffffff',
-          border: '1px solid',
-          borderColor: 'gray.200',
-        },
+        borderRadius: 'md',
+        px: 2,
+        textTransform: 'none',
+        fontWeight: 'semibold',
       },
     },
   },
@@ -254,7 +191,8 @@ function AppRoutes() {
 
 function App() {
   return (
-    <ChakraProvider theme={theme}>
+    // Notifications top-right: at the bottom they covered the gate's Let in / Turn away buttons.
+    <ChakraProvider theme={theme} toastOptions={{ defaultOptions: { position: 'top-right', isClosable: true } }}>
       <AuthProvider>
         <Router>
           <Navbar />

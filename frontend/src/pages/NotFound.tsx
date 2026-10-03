@@ -11,7 +11,6 @@ const NotFound: React.FC = () => (
       borderRadius="xl"
       border="1px solid"
       borderColor="gray.200"
-      boxShadow="8px 8px 16px #d1d5db, -8px -8px 16px #ffffff"
     >
       <Heading size="md">Page not found</Heading>
       <Text color="gray.600">The page you are looking for does not exist or has moved.</Text>

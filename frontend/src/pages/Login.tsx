@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Heading,
@@ -19,6 +19,7 @@ import {
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { mockAuthEnabled } from '../config';
+import { homeFor } from '../utils/nav';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff, FiShield, FiUser, FiLock } from 'react-icons/fi';
 
@@ -27,11 +28,19 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const bgColor = useColorModeValue('gray.100', 'gray.800');
+
+  // Signed in (just now, or already): go back to the page that sent them
+  // here, else to their own start page rather than the public home page.
+  useEffect(() => {
+    if (!user) return;
+    const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
+    navigate(from ?? homeFor(user.role), { replace: true });
+  }, [user, location.state, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,9 +54,6 @@ const Login: React.FC = () => {
         duration: 3000,
         isClosable: true,
       });
-      // Return the user to the page that sent them here, if any.
-      const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
-      navigate(from ?? '/', { replace: true });
     } catch (error) {
       const description =
         error instanceof Error && error.message
@@ -89,7 +95,6 @@ const Login: React.FC = () => {
         bg="white"
         p={8}
         borderRadius="2xl"
-        boxShadow="12px 12px 24px #d1d5db, -12px -12px 24px #ffffff"
         border="1px solid"
         borderColor="gray.200"
         w="full"
@@ -105,7 +110,6 @@ const Login: React.FC = () => {
             display="flex"
             alignItems="center"
             justifyContent="center"
-            boxShadow="inset 4px 4px 8px #bae6fd, inset -4px -4px 8px #ffffff"
             border="1px solid"
             borderColor="brand.200"
           >
@@ -131,11 +135,9 @@ const Login: React.FC = () => {
         <form onSubmit={handleSubmit}>
           <VStack spacing={6}>
             <FormControl isRequired>
-              <FormLabel color="gray.700">
-                <HStack spacing={2}>
-                  <Icon as={FiUser} color="brand.500" />
-                  <Text>Email Address</Text>
-                </HStack>
+              <FormLabel color="gray.700" display="flex" alignItems="center" gap={2}>
+                <Icon as={FiUser} color="brand.500" />
+                Email
               </FormLabel>
               <Input
                 type="email"
@@ -144,22 +146,18 @@ const Login: React.FC = () => {
                 placeholder="Enter your email"
                 size="lg"
                 borderRadius="lg"
-                boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                 border="1px solid"
                 borderColor="gray.200"
                 _focus={{
-                  boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                   borderColor: 'brand.400',
                 }}
               />
             </FormControl>
 
             <FormControl isRequired>
-              <FormLabel color="gray.700">
-                <HStack spacing={2}>
-                  <Icon as={FiLock} color="brand.500" />
-                  <Text>Password</Text>
-                </HStack>
+              <FormLabel color="gray.700" display="flex" alignItems="center" gap={2}>
+                <Icon as={FiLock} color="brand.500" />
+                Password
               </FormLabel>
               <InputGroup size="lg">
                 <Input
@@ -168,11 +166,9 @@ const Login: React.FC = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   borderRadius="lg"
-                  boxShadow="inset 4px 4px 8px #d1d5db, inset -4px -4px 8px #ffffff"
                   border="1px solid"
                   borderColor="gray.200"
                   _focus={{
-                    boxShadow: 'inset 6px 6px 12px #cbd5e1, inset -6px -6px 12px #ffffff',
                     borderColor: 'brand.400',
                   }}
                 />
@@ -201,7 +197,6 @@ const Login: React.FC = () => {
               _hover={{
                 bg: 'brand.50',
                 color: 'brand.600',
-                boxShadow: '8px 8px 16px #bae6fd, -8px -8px 16px #ffffff',
               }}
             >
               Sign In
@@ -225,13 +220,8 @@ const Login: React.FC = () => {
                 w="full"
                 onClick={() => fillDemoCredentials(cred.email, cred.password)}
                 borderRadius="lg"
-                boxShadow="2px 2px 4px #d1d5db, -2px -2px 4px #ffffff"
                 border="1px solid"
                 borderColor="gray.200"
-                _hover={{
-                  boxShadow: '4px 4px 8px #cbd5e1, -4px -4px 8px #ffffff',
-                  transform: 'translateY(-1px)',
-                }}
               >
                 <HStack spacing={2} justify="center">
                   <Text fontSize="xs" fontWeight="bold" color="brand.500">

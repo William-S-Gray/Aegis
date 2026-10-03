@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Select, Button, HStack, Spinner, Checkbox, CheckboxGroup, useToast, Textarea, Menu, MenuButton, MenuList, MenuItem } from "@chakra-ui/react";
+import { Badge, Box, Card, Flex, Heading, Input, Table, Thead, Tbody, Tr, Th, Td, Select, Button, HStack, Spinner, Text, useToast, Menu, MenuButton, MenuList, MenuItem, MenuOptionGroup, MenuItemOption, MenuDivider } from "@chakra-ui/react";
+import { FiChevronDown, FiColumns, FiDownload } from "react-icons/fi";
 import api from "../api";
 import { asArray, asObject, asNumber } from "../utils/safe";
 import { exportCSV, exportExcel, exportPDF, formatDate } from "../utils/exporters";
+import { mismatchLabel, mismatchScheme } from "../utils/labels";
 const ALL_COLUMNS = [
   { key: "plate_number", label: "Plate" },
+  { key: "mismatch_type", label: "Reason" },
   { key: "detected_type", label: "Type" },
   { key: "detected_color", label: "Color" },
   { key: "plate_confidence", label: "Confidence" },
@@ -19,7 +22,7 @@ export default function GuardAlertHistory() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [selectedColumns, setSelectedColumns] = useState(ALL_COLUMNS.map(c => c.key));
+  const [selectedColumns, setSelectedColumns] = useState(ALL_COLUMNS.filter(c => c.key !== "feedback_status").map(c => c.key));
   const [dateFormat, setDateFormat] = useState("datetime");
   const [users, setUsers] = useState([]);
   // Keyed by alert id: a single shared draft leaked one row's text into every row.
@@ -65,10 +68,14 @@ export default function GuardAlertHistory() {
   const filtered = alerts;
   const exportCols = ALL_COLUMNS.filter(c => selectedColumns.includes(c.key));
 
-  const formatCell = (row, column) =>
-    column.key === "timestamp"
-      ? formatDate(row[column.key], dateFormat)
-      : String(row[column.key] ?? "");
+  // One formatter for screen and export, so both read the same.
+  const formatCell = (row, column) => {
+    const value = row[column.key];
+    if (column.key === "timestamp") return formatDate(value, dateFormat);
+    if (column.key === "mismatch_type") return mismatchLabel(String(value ?? ""));
+    if (column.key === "plate_confidence") return typeof value === "number" ? `${Math.round(value * 100)}%` : "";
+    return String(value ?? "");
+  };
 
   // Infinite scroll
   const observer = useRef();
@@ -115,112 +122,135 @@ export default function GuardAlertHistory() {
   };
 
   return (
-    <Box p={6}>
-      <Heading mb={4}>Alert History</Heading>
-      <HStack mb={4}>
-        <Select value={filter} onChange={e => setFilter(e.target.value)} width="200px">
-          <option value="">All</option>
-          <option value="false_alarm">False Alarm</option>
+    <Box p={{ base: 4, md: 8 }} maxW="7xl" mx="auto">
+      <Heading size="lg" mb={1}>Alert history</Heading>
+      <Text color="gray.600" mb={4}>Every camera read, newest first. Set the verdict and leave notes for the next shift.</Text>
+      <Flex mb={4} gap={3} wrap="wrap" align="center">
+        <Select value={filter} onChange={e => setFilter(e.target.value)} width="200px" aria-label="Filter by verdict">
+          <option value="">All verdicts</option>
+          <option value="pending">Pending</option>
+          <option value="false_alarm">False alarm</option>
           <option value="investigated">Investigated</option>
           <option value="escalated">Escalated</option>
         </Select>
-        <CheckboxGroup value={selectedColumns} onChange={setSelectedColumns}>
-          <HStack>
-            {ALL_COLUMNS.map(col => (
-              <Checkbox key={col.key} value={col.key}>{col.label}</Checkbox>
-            ))}
-          </HStack>
-        </CheckboxGroup>
-        <Select value={dateFormat} onChange={e => setDateFormat(e.target.value)} width="150px">
-          <option value="datetime">Date & Time</option>
-          <option value="date">Date Only</option>
-          <option value="time">Time Only</option>
+        <Select value={dateFormat} onChange={e => setDateFormat(e.target.value)} width="160px" aria-label="Date format">
+          <option value="datetime">Date and time</option>
+          <option value="date">Date only</option>
+          <option value="time">Time only</option>
         </Select>
-        <Button colorScheme="green" onClick={() => exportCSV(filtered, "alerts.csv", exportCols, formatCell)}>Export CSV</Button>
-        <Button colorScheme="blue" onClick={() => exportExcel(filtered, "alerts.xlsx", exportCols, "Alerts", formatCell)}>Export Excel</Button>
-        <Button colorScheme="red" onClick={() => exportPDF(filtered, "alerts.pdf", exportCols, formatCell)}>Export PDF</Button>
-      </HStack>
-      <Table variant="simple">
-        <Thead>
-          <Tr>
-            {exportCols.map(col => <Th key={col.key}>{col.label}</Th>)}
-            <Th>Assigned To</Th>
-            <Th>Status</Th>
-            <Th>Verdict</Th>
-            <Th>Comments</Th>
-            <Th>Actions</Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {filtered.map((alert, i) => (
-            <Tr key={alert.id} ref={i === filtered.length - 1 ? lastAlertRef : null}>
-              {exportCols.map(col => (
-                <Td key={col.key}>
-                  {col.key === "timestamp" ? formatDate(alert[col.key], dateFormat) : alert[col.key]}
-                </Td>
+        <Box flex={1} />
+        <Menu closeOnSelect={false}>
+          <MenuButton as={Button} variant="neumorphic" leftIcon={<FiColumns />} rightIcon={<FiChevronDown />}>
+            Columns
+          </MenuButton>
+          <MenuList>
+            <MenuOptionGroup type="checkbox" value={selectedColumns} onChange={setSelectedColumns}>
+              {ALL_COLUMNS.map(col => (
+                <MenuItemOption key={col.key} value={col.key}>{col.label}</MenuItemOption>
               ))}
-              <Td>
-                <Menu>
-                  <MenuButton as={Button} size="xs">{users.find(u => u.id === alert.assigned_to)?.full_name || "Assign"}</MenuButton>
-                  <MenuList>
-                    {users.map(u => <MenuItem key={u.id} onClick={() => assignAlert(alert.id, u.id)}>{u.full_name}</MenuItem>)}
-                  </MenuList>
-                </Menu>
-              </Td>
-              <Td>
-                <Select size="xs" aria-label={`Status for ${alert.plate_number}`} value={alert.status} onChange={e => updateStatus(alert.id, e.target.value)}>
-                  <option value="open">Open</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="closed">Closed</option>
-                </Select>
-              </Td>
-              <Td>
-                <Select
-                  size="xs"
-                  aria-label={`Verdict for ${alert.plate_number}`}
-                  value={alert.feedback_status}
-                  onChange={e => updateVerdict(alert, e.target.value)}
-                >
-                  <option value="pending">Pending</option>
-                  <option value="false_alarm">False alarm</option>
-                  <option value="investigated">Investigated</option>
-                  <option value="escalated">Escalated</option>
-                </Select>
-              </Td>
-              <Td>
-                <Box maxW="240px">
+            </MenuOptionGroup>
+          </MenuList>
+        </Menu>
+        <Menu>
+          <MenuButton as={Button} colorScheme="brand" leftIcon={<FiDownload />} rightIcon={<FiChevronDown />}>
+            Export
+          </MenuButton>
+          <MenuList>
+            <MenuItem onClick={() => exportCSV(filtered, "alerts.csv", exportCols, formatCell)}>CSV</MenuItem>
+            <MenuItem onClick={() => exportExcel(filtered, "alerts.xlsx", exportCols, "Alerts", formatCell)}>Excel</MenuItem>
+            <MenuDivider />
+            <MenuItem onClick={() => exportPDF(filtered, "alerts.pdf", exportCols, formatCell)}>PDF</MenuItem>
+          </MenuList>
+        </Menu>
+      </Flex>
+      {error && <Box color="red.600" mb={3}>{error}</Box>}
+      <Card overflowX="auto">
+        <Table size="sm">
+          <Thead>
+            <Tr>
+              {exportCols.map(col => <Th key={col.key}>{col.label}</Th>)}
+              <Th>Assigned to</Th>
+              <Th>Status</Th>
+              <Th>Verdict</Th>
+              <Th minW="260px">Notes</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {filtered.length === 0 && !loading && (
+              <Tr><Td colSpan={exportCols.length + 4}><Text color="gray.500" py={6} textAlign="center">No alerts match this filter.</Text></Td></Tr>
+            )}
+            {filtered.map((alert, i) => (
+              <Tr key={alert.id} ref={i === filtered.length - 1 ? lastAlertRef : null} verticalAlign="top">
+                {exportCols.map(col => (
+                  <Td key={col.key} whiteSpace="nowrap" fontFamily={col.key === "plate_number" ? "mono" : undefined} fontWeight={col.key === "plate_number" ? "bold" : undefined}>
+                    {col.key === "mismatch_type"
+                      ? <Badge colorScheme={mismatchScheme(alert.mismatch_type)}>{formatCell(alert, col)}</Badge>
+                      : formatCell(alert, col)}
+                  </Td>
+                ))}
+                <Td>
+                  <Menu>
+                    <MenuButton as={Button} size="sm" variant="neumorphic" rightIcon={<FiChevronDown />}>
+                      {users.find(u => u.id === alert.assigned_to)?.full_name || "Assign"}
+                    </MenuButton>
+                    <MenuList>
+                      {users.map(u => <MenuItem key={u.id} onClick={() => assignAlert(alert.id, u.id)}>{u.full_name}</MenuItem>)}
+                    </MenuList>
+                  </Menu>
+                </Td>
+                <Td>
+                  <Select size="sm" minW="130px" aria-label={`Status for ${alert.plate_number}`} value={alert.status} onChange={e => updateStatus(alert.id, e.target.value)}>
+                    <option value="open">Open</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="closed">Closed</option>
+                  </Select>
+                </Td>
+                <Td>
+                  <Select
+                    size="sm"
+                    minW="140px"
+                    aria-label={`Verdict for ${alert.plate_number}`}
+                    value={alert.feedback_status}
+                    onChange={e => updateVerdict(alert, e.target.value)}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="false_alarm">False alarm</option>
+                    <option value="investigated">Investigated</option>
+                    <option value="escalated">Escalated</option>
+                  </Select>
+                </Td>
+                <Td>
                   {asArray(alert.comments).map(c => (
-                    <Box key={c.id} mb={1} fontSize="xs">
-                      <Box as="span" fontWeight="bold">{c.author_email || "Unknown"}</Box>
+                    <Box key={c.id} mb={2} fontSize="sm">
+                      <Box as="span" fontWeight="semibold">{c.author_email || "Unknown"}</Box>
                       <Box as="span" color="gray.500"> · {formatDate(c.created_at, "datetime")}</Box>
                       <Box whiteSpace="pre-wrap">{c.body}</Box>
                     </Box>
                   ))}
-                </Box>
-                <Textarea
-                  size="xs"
-                  value={commentDrafts[alert.id] || ""}
-                  onChange={e => setCommentDrafts(prev => ({ ...prev, [alert.id]: e.target.value }))}
-                  placeholder="Add comment..."
-                />
-                <Button
-                  size="xs"
-                  mt={1}
-                  isDisabled={!(commentDrafts[alert.id] || "").trim()}
-                  onClick={() => addComment(alert.id, commentDrafts[alert.id])}
-                >
-                  Add
-                </Button>
-              </Td>
-              <Td>
-                {/* Additional actions if needed */}
-              </Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
+                  <HStack>
+                    <Input
+                      size="sm"
+                      aria-label={`Note for ${alert.plate_number}`}
+                      value={commentDrafts[alert.id] || ""}
+                      onChange={e => setCommentDrafts(prev => ({ ...prev, [alert.id]: e.target.value }))}
+                      onKeyDown={e => { if (e.key === "Enter") addComment(alert.id, commentDrafts[alert.id]); }}
+                      placeholder="Add a note…"
+                    />
+                    <Button
+                      size="sm"
+                      isDisabled={!(commentDrafts[alert.id] || "").trim()}
+                      onClick={() => addComment(alert.id, commentDrafts[alert.id])}
+                    >
+                      Add
+                    </Button>
+                  </HStack>
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      </Card>
       {loading && <Spinner mt={4} />}
-      {error && <Box color="red.500" mb={2}>{error}</Box>}
     </Box>
   );
-} 
+}

@@ -1,15 +1,16 @@
 import uuid
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core import audit
 from app.core.deps import require_admin, require_guard
 from app.core.security import hash_password
 from app.database import get_db
-from app.models import Role, User
-from app.schemas import UserCreate, UserPublic, UserUpdate
+from app.models import RefreshToken, Role, User
+from app.schemas import PasswordReset, UserCreate, UserPublic, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -119,19 +120,58 @@ def update_user(
     return user
 
 
+@router.post("/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(
+    user_id: uuid.UUID,
+    payload: PasswordReset,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Response:
+    """
+    Set a new password for a user who has lost theirs. Every session they had
+    is revoked, so a device that was signed in must sign in again.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.hashed_password = hash_password(payload.password)
+    db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(timezone.utc))
+    )
+    audit.record(
+        db,
+        action="user.password_reset",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="user",
+        resource_id=str(user.id),
+        details={"email": user.email},
+    )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.delete("/{user_id}", response_model=UserPublic)
 def deactivate_user(
     user_id: uuid.UUID,
     request: Request,
+    permanent: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> User:
     """
-    Deactivate rather than delete.
+    Deactivate by default; `?permanent=true` deletes the account.
 
-    Access logs reference the acting user; hard deletion would tear holes in
-    the audit trail. Deactivation takes effect immediately because every
-    authenticated request re-checks `is_active`.
+    Deactivation keeps history attributed and can be undone, and takes effect
+    immediately because every authenticated request re-checks `is_active`.
+    Permanent deletion removes the account and its sessions: records that
+    pointed at it (access decisions, alert assignments) keep their data but
+    lose the name. The audit log keeps the email, so the trail survives.
     """
     user = db.get(User, user_id)
     if user is None:
@@ -142,6 +182,22 @@ def deactivate_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot deactivate your own account",
         )
+
+    if permanent:
+        removed = UserPublic.model_validate(user)
+        audit.record(
+            db,
+            action="user.deleted",
+            request=request,
+            actor_id=current_user.id,
+            actor_email=current_user.email,
+            resource_type="user",
+            resource_id=str(user.id),
+            details={"email": user.email, "role": user.role.value},
+        )
+        db.delete(user)
+        db.commit()
+        return removed
 
     user.is_active = False
     audit.record(

@@ -68,11 +68,11 @@ describe('GuardDashboard decisions', () => {
     const socket = await renderConnected();
 
     act(() => socket.push(alertFor('a1', 'FIRST1')));
-    expect(await screen.findByText(/New Alert - FIRST1/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'FIRST1' })).toBeInTheDocument();
 
     // The next vehicle arrives while the guard is still reading the first.
     act(() => socket.push(alertFor('a2', 'SECOND2')));
-    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Let in' }));
 
     const decision = vi.mocked(api.post).mock.calls.find(([url]) => url === '/access-logs');
     expect(decision?.[1]).toMatchObject({
@@ -82,7 +82,7 @@ describe('GuardDashboard decisions', () => {
       details: { alert_id: 'a1' },
     });
     // The second is shown next rather than lost.
-    expect(await screen.findByText(/New Alert - SECOND2/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'SECOND2' })).toBeInTheDocument();
   });
 
   it('a decision the server refuses is reported, not queued as offline', async () => {
@@ -94,7 +94,7 @@ describe('GuardDashboard decisions', () => {
     });
 
     act(() => socket.push(alertFor('a1', 'FIRST1')));
-    await userEvent.click(await screen.findByRole('button', { name: 'Deny' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Turn away' }));
 
     expect(await screen.findByText('Decision not recorded')).toBeInTheDocument();
     expect(db.access_logs_queue.add).not.toHaveBeenCalled();
@@ -111,6 +111,20 @@ describe('GuardDashboard decisions', () => {
   });
 });
 
+describe('GuardDashboard queue', () => {
+  it('"decide later" keeps the vehicle in the queue instead of discarding it', async () => {
+    const socket = await renderConnected();
+    act(() => socket.push(alertFor('a1', 'FIRST1')));
+    act(() => socket.push(alertFor('a2', 'SECOND2')));
+
+    await userEvent.click(await screen.findByRole('button', { name: /decide later/i }));
+    expect(await screen.findByRole('heading', { name: 'SECOND2' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /decide later/i }));
+    expect(await screen.findByRole('heading', { name: 'FIRST1' })).toBeInTheDocument();
+  });
+});
+
 describe('GuardDashboard recent alerts', () => {
   it('shows alerts from before the page loaded, without asking for a decision', async () => {
     // A guard signing in or refreshing used to see "No alerts yet" over a
@@ -118,12 +132,12 @@ describe('GuardDashboard recent alerts', () => {
     const socket = await renderConnected([alertFor('old-1', 'EARLIER1').alert]);
 
     expect(await screen.findByText('EARLIER1')).toBeInTheDocument();
-    expect(screen.queryByText(/New Alert - EARLIER1/)).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'EARLIER1' })).toBeNull();
 
-    // The same alert arriving live is not listed twice.
+    // The same alert arriving live is not listed twice: once at the gate, once in the list.
     act(() => socket.push(alertFor('old-1', 'EARLIER1')));
-    await screen.findByText(/New Alert - EARLIER1/);
-    expect(screen.getAllByText('EARLIER1')).toHaveLength(1);
+    await screen.findByRole('heading', { name: 'EARLIER1' });
+    expect(screen.getAllByText('EARLIER1')).toHaveLength(2);
   });
 });
 
@@ -139,7 +153,7 @@ describe('GuardDashboard watchlist', () => {
       })
     );
 
-    expect(await screen.findByText(/New Alert - ABC1234/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'ABC1234' })).toBeInTheDocument();
     expect(screen.getByText('WATCHLIST: Reported stolen 30 Sep')).toBeInTheDocument();
   });
 });
@@ -152,6 +166,6 @@ describe('GuardDashboard automatic barrier', () => {
     act(() => socket.push({ ...opened, alert: { ...opened.alert, auto_opened: true } }));
 
     expect(await screen.findByText('Opened automatically')).toBeInTheDocument();
-    expect(screen.queryByText(/New Alert - AAA5329/)).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'AAA5329' })).toBeNull();
   });
 });

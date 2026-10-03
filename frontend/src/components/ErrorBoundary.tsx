@@ -48,7 +48,6 @@ class ErrorBoundary extends React.Component<Props, State> {
           borderRadius="xl"
           border="1px solid"
           borderColor="gray.200"
-          boxShadow="8px 8px 16px #d1d5db, -8px -8px 16px #ffffff"
         >
           <Heading size="md" color="red.500">
             Something went wrong on this page

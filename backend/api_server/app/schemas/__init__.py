@@ -31,7 +31,7 @@ from app.schemas.resources import (
     VehiclePublic,
     VehicleUpdate,
 )
-from app.schemas.user import UserCreate, UserPublic, UserUpdate
+from app.schemas.user import PasswordReset, UserCreate, UserPublic, UserUpdate
 
 __all__ = [
     "AccessLogCreate",
@@ -61,6 +61,7 @@ __all__ = [
     "UserCreate",
     "UserPublic",
     "UserUpdate",
+    "PasswordReset",
     "VehicleCreate",
     "VisitPublic",
     "VisitorPassCreate",
