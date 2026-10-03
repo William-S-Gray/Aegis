@@ -16,6 +16,25 @@ compressed custom-format dump, encrypts it, records a checksum over the stored
 artefact, optionally copies it off-box, and prunes files older than
 `BACKUP_RETAIN_DAYS` (default 30).
 
+With the docker-compose deployment, leave `DATABASE_URL` unset: run from the
+repository root, `backup.sh` dumps the `db` container directly, so the database
+port never needs publishing. It reads `BACKUP_*` from `.env`, which matters
+under cron, where nothing else sets them. A nightly job:
+
+```cron
+30 2 * * * cd /path/to/Aegis && PATH=/usr/local/bin:/usr/bin:/bin scripts/backup.sh ./backups >> backups/backup.log 2>&1
+```
+
+To verify without touching the live server, restore into a throwaway
+PostgreSQL:
+
+```bash
+docker run -d --rm --name aegis-verify -e POSTGRES_PASSWORD=verify -p 127.0.0.1:55499:5432 postgres:16-alpine
+BACKUP_IDENTITY=~/aegis-backup-key.txt VERIFY_ADMIN_URL=postgresql://postgres:verify@localhost:55499/postgres \
+  scripts/verify-backup.sh backups/aegis-<stamp>.dump.age
+docker stop aegis-verify
+```
+
 ### Encryption
 
 ```bash

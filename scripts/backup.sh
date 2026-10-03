@@ -4,7 +4,8 @@
 #
 #   scripts/backup.sh [output-directory]
 #
-# Reads DATABASE_URL from the environment or .env. Uses pg_dump's custom
+# Reads DATABASE_URL from the environment or .env; without one, dumps the
+# docker-compose `db` service (run from the repository root). Uses pg_dump's custom
 # format (-Fc), which is compressed and lets pg_restore select individual
 # objects — a plain SQL dump gives you neither.
 #
@@ -28,20 +29,17 @@
 set -euo pipefail
 
 OUT_DIR="${1:-./backups}"
+
+# Settings from .env, unless already in the environment. Under cron there is no
+# shell profile, so without this encryption and the off-box copy would be
+# silently skipped.
+if [[ -f .env ]]; then
+  while IFS= read -r line; do
+    name="${line%%=*}"
+    [[ -n "${!name:-}" ]] || eval "export $line"
+  done < <(grep -E '^(DATABASE_URL|BACKUP_[A-Z_]+|POSTGRES_(USER|DB))=' .env)
+fi
 RETAIN_DAYS="${BACKUP_RETAIN_DAYS:-30}"
-
-if [[ -z "${DATABASE_URL:-}" && -f .env ]]; then
-  # shellcheck disable=SC2046
-  export $(grep -E '^DATABASE_URL=' .env | xargs -d '\n')
-fi
-
-if [[ -z "${DATABASE_URL:-}" ]]; then
-  echo "DATABASE_URL is not set" >&2
-  exit 1
-fi
-
-source "$(dirname "${BASH_SOURCE[0]}")/pg-url.sh"
-pg_url_split "$DATABASE_URL"
 
 mkdir -p "$OUT_DIR"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -49,8 +47,18 @@ TARGET="$OUT_DIR/aegis-$STAMP.dump"
 
 echo "Backing up to $TARGET"
 # Restrictive umask: the dump exists on disk before it is encrypted.
-(umask 077 && pg_dump --format=custom --compress=9 --no-owner --no-privileges \
-                      --file="$TARGET" "$PG_URL")
+if [[ -n "${DATABASE_URL:-}" ]]; then
+  source "$(dirname "${BASH_SOURCE[0]}")/pg-url.sh"
+  pg_url_split "$DATABASE_URL"
+  (umask 077 && pg_dump --format=custom --compress=9 --no-owner --no-privileges \
+                        --file="$TARGET" "$PG_URL")
+else
+  # The docker-compose deployment: the database port is not published, so dump
+  # from inside the db container over its local socket.
+  (umask 077 && docker compose exec -T db \
+     pg_dump --format=custom --compress=9 --no-owner --no-privileges \
+             -U "${POSTGRES_USER:-aegis}" "${POSTGRES_DB:-aegis}" > "$TARGET")
+fi
 
 encrypt() {
   local plain="$1"
