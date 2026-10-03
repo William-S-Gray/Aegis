@@ -3,7 +3,7 @@ from typing import Literal
 
 import re
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -106,6 +106,23 @@ class Settings(BaseSettings):
             except re.error as exc:
                 raise ValueError(f"PLATE_FORMATS has an invalid pattern {pattern!r}: {exc}") from None
         return value
+
+    # ---- Automatic barrier ----------------------------------------------
+    # Signed POST to the barrier controller/relay for a camera read of an
+    # active registered vehicle that matches its registration and needs no
+    # review. Empty turns automatic opening off: every vehicle waits for a guard.
+    barrier_open_url: str = ""
+    # Shared with the relay, which should refuse requests without a valid
+    # X-Aegis-Signature (HMAC-SHA256 of the body).
+    barrier_secret: str = ""
+    barrier_timeout_seconds: float = 3.0
+
+    @model_validator(mode="after")
+    def _barrier_needs_a_secret(self) -> "Settings":
+        # Without one, the relay cannot tell Aegis from anyone who can reach it.
+        if self.barrier_open_url and len(self.barrier_secret) < 16:
+            raise ValueError("BARRIER_SECRET (16+ characters) is required when BARRIER_OPEN_URL is set")
+        return self
 
     # Login throttling
     login_max_attempts: int = 5

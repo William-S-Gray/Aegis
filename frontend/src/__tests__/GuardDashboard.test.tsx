@@ -143,3 +143,15 @@ describe('GuardDashboard watchlist', () => {
     expect(screen.getByText('WATCHLIST: Reported stolen 30 Sep')).toBeInTheDocument();
   });
 });
+
+describe('GuardDashboard automatic barrier', () => {
+  it('lists a vehicle the barrier let in without asking the guard to decide', async () => {
+    const socket = await renderConnected();
+    const opened = alertFor('a9', 'AAA5329');
+
+    act(() => socket.push({ ...opened, alert: { ...opened.alert, auto_opened: true } }));
+
+    expect(await screen.findByText('Opened automatically')).toBeInTheDocument();
+    expect(screen.queryByText(/New Alert - AAA5329/)).toBeNull();
+  });
+});

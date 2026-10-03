@@ -227,6 +227,56 @@ and 443; `HTTP_PORT`/`HTTPS_PORT` to change them). Configuration is in
 - The frontend's API URL and CSP pointed at the HTTPS origin.
 - A spoofed `X-Forwarded-For` from another container was ignored.
 
+## Automatic barrier
+
+Off by default: every vehicle waits for a guard's decision. When
+`BARRIER_OPEN_URL` and `BARRIER_SECRET` are set, Aegis opens the barrier itself,
+but only for a vehicle that needs no human:
+
+- a **camera** read (a plate typed by a guard is the guard's call),
+- of an **active registered** vehicle,
+- that **matches** its registration (no type or colour mismatch),
+- auto-accepted, with **nothing for review** (not low confidence, not a small
+  plate, not an unexpected format).
+
+Each opening is an access-log entry (`approve`, no guard, `automatic: true`)
+and an audit event (`barrier.auto_opened`). The guard console lists the vehicle
+as **Opened automatically** without asking for a decision. If the controller
+does not answer `2xx` within 3 seconds, the attempt is audited
+(`barrier.open_failed`) and the guard gets the usual decision prompt, so a broken
+relay never leaves a vehicle unseen.
+
+**The relay's side.** Aegis sends:
+
+```http
+POST <BARRIER_OPEN_URL>
+Content-Type: application/json
+X-Aegis-Signature: <hex HMAC-SHA256 of the body, keyed with BARRIER_SECRET>
+
+{"action": "open", "alert_id": "…", "plate": "AAA5329", "site_id": null, "timestamp": 1790000000}
+```
+
+The relay must **verify the signature**, then refuse a stale or repeated
+request, before opening. Otherwise anyone who captured one request on the
+network could replay it to open the gate later:
+
+```python
+import hashlib, hmac, json, time
+expected = hmac.new(SECRET.encode(), body, hashlib.sha256).hexdigest()
+if not hmac.compare_digest(expected, request.headers["X-Aegis-Signature"]):
+    reject()
+msg = json.loads(body)
+if abs(time.time() - msg["timestamp"]) > 30:  # needs the relay's clock in sync (NTP)
+    reject()
+if msg["alert_id"] in seen_recently:  # each alert opens the gate once
+    reject()
+seen_recently.add(msg["alert_id"])  # keep at least 60 s worth
+```
+
+Put the relay on the same isolated network as the cameras (see
+[camera-installation.md](camera-installation.md)), and test the failure path:
+stop the relay and check that the guard is prompted.
+
 ## Monitoring
 
 ```bash
