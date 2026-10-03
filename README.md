@@ -111,11 +111,12 @@ For showing Aegis without a server. **Not for a working gate**: the free Render
 API sleeps when idle and its free database is deleted after 30 days.
 
 1. **Render:** New → Blueprint → this repository. `render.yaml` creates the
-   API, PostgreSQL and Key Value; enter the Vercel URL for `CORS_ORIGINS`. If
-   the API's address is not `aegis-api.onrender.com`, update it in
-   `frontend/vercel.json` (rewrite and CSP) and in `VITE_WS_URL` below.
+   API, PostgreSQL and Key Value; enter the Vercel URL for `CORS_ORIGINS`.
+   Render may add a suffix to the API's address (the current demo is
+   `aegis-api-l24o.onrender.com`); it must match `frontend/vercel.json`
+   (rewrite and CSP) and `VITE_WS_URL` below.
 2. **Vercel:** import the repository with root directory `frontend`, and set
-   `VITE_API_URL=/api/v1` and `VITE_WS_URL=wss://aegis-api.onrender.com/api/v1`.
+   `VITE_API_URL=/api/v1` and `VITE_WS_URL=wss://aegis-api-l24o.onrender.com/api/v1`.
 3. **First administrator**, from `backend/api_server`, with the database's
    external URL from Render:
 
