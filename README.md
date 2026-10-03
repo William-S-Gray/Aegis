@@ -135,7 +135,7 @@ which uses no Actions minutes; see [docs/operations.md](docs/operations.md#ci-on
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
-Prometheus, Alertmanager, and Grafana with a provisioned dashboard and ten
+Prometheus, Alertmanager, and Grafana with a provisioned dashboard and twelve
 alert rules, all bound to loopback. Alertmanager sends alerts to Discord
 once you save a webhook URL to `monitoring/discord-webhook-url`; send a test
 alert before relying on it. See [docs/operations.md](docs/operations.md).

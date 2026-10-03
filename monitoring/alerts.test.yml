@@ -17,3 +17,57 @@ tests:
       - eval_time: 0m
         alertname: AegisWatchlistHit
         exp_alerts: []
+
+  # One camera stops (its age keeps growing); the other keeps reporting.
+  - interval: 15s
+    input_series:
+      - series: 'aegis_camera_seconds_since_frame{camera="gate-in"}'
+        values: '1+15x20'
+      - series: 'aegis_camera_seconds_since_frame{camera="gate-out"}'
+        values: '1x20'
+      - series: 'up{job="aegis-api"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: AegisCameraOffline
+        exp_alerts:
+          - exp_labels: {severity: critical, camera: gate-in}
+            exp_annotations:
+              summary: "Camera gate-in has stopped sending frames"
+              description: "No frame from this camera for over 2 minutes, so vehicles at its gate are not being read. Check its power and network cable, then that its stream opens (docs/camera-installation.md). Until then, guards must check vehicles at that gate by eye."
+      - eval_time: 1m
+        alertname: AegisCameraOffline
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: AegisNoCamerasReporting
+        exp_alerts: []
+
+  # Cameras reported, then the API restarted and nothing came back.
+  - interval: 15s
+    input_series:
+      - series: 'aegis_camera_seconds_since_frame{camera="gate-in"}'
+        values: '1x8 stale'
+      - series: 'up{job="aegis-api"}'
+        values: '1x28'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AegisNoCamerasReporting
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "No camera is sending frames"
+              description: "Cameras reported earlier today, but none has for 2 minutes. Every gate is unmonitored. The vision service is most likely down: check `docker compose ps vision` and its logs."
+      - eval_time: 1m
+        alertname: AegisNoCamerasReporting
+        exp_alerts: []
+
+  # A site that has never had a camera reporting stays quiet.
+  - interval: 15s
+    input_series:
+      - series: 'up{job="aegis-api"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AegisNoCamerasReporting
+        exp_alerts: []
+

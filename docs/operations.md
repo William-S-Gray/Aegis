@@ -203,8 +203,8 @@ Overview* dashboard provisioned. Both bind to loopback: Prometheus has no
 authentication and its data describes your traffic in detail. Put them behind
 your VPN or an authenticating proxy, never on a public port.
 
-Nine alert rules ship in `monitoring/alerts.yml`, validated by `promtool` in
-CI. Each carries a description saying what it means and what to check, because
+Twelve alert rules ship in `monitoring/alerts.yml`, validated by `promtool` in
+CI, with the paging-critical ones unit-tested (`monitoring/alerts.test.yml`). Each carries a description saying what it means and what to check, because
 an alert that fires at 03:00 without a next step becomes noise the team learns
 to ignore.
 
@@ -270,6 +270,25 @@ Worth alerting on:
 
 That last one is the quiet failure: everything looks healthy while nobody is
 actually being notified.
+
+### Camera offline
+
+A dead camera is the other quiet failure: the system looks healthy and simply
+reads nothing at that gate. The API exposes
+`aegis_camera_seconds_since_frame{camera="<host-path>"}` from the preview
+frames the vision service sends about once a second, and two critical rules
+page from it:
+
+- **`AegisCameraOffline`:** one camera has sent nothing for 2 minutes. The
+  page names it (host and path, never the stream's credentials).
+- **`AegisNoCamerasReporting`:** cameras reported earlier today but none does
+  now, usually the vision service down. It also covers an API restart, after
+  which the API has forgotten every camera until frames arrive again.
+
+Both need `VISION_PREVIEW_INTERVAL_SECONDS` above 0 (the default is 1). A
+camera that was already dead when the API restarted is no longer known by
+name. If other cameras still report, only the guard console's camera panel
+shows it as missing.
 
 ## CI on a self-hosted runner
 

@@ -87,6 +87,39 @@ groups:
             but nobody is being notified in real time. Expected out of hours —
             page only if this fires during a staffed shift.
 
+      - alert: AegisCameraOffline
+        # From the preview frames the vision service sends about once a
+        # second (VISION_PREVIEW_INTERVAL_SECONDS must be above 0).
+        expr: max by (camera) (aegis_camera_seconds_since_frame) > 60
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Camera {{ $labels.camera }} has stopped sending frames"
+          description: >-
+            No frame from this camera for over 2 minutes, so vehicles at its
+            gate are not being read. Check its power and network cable, then
+            that its stream opens (docs/camera-installation.md). Until then,
+            guards must check vehicles at that gate by eye.
+
+      - alert: AegisNoCamerasReporting
+        # Catches what AegisCameraOffline cannot: the vision service down
+        # after an API restart, when the API no longer knows any camera.
+        # Silent on a site that has never had cameras reporting.
+        expr: >-
+          (count(aegis_camera_seconds_since_frame < 60) or on() vector(0)) == 0
+          and on() max_over_time((count(aegis_camera_seconds_since_frame) or on() vector(0))[1d:5m]) > 0
+          and on() up{job="aegis-api"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No camera is sending frames"
+          description: >-
+            Cameras reported earlier today, but none has for 2 minutes. Every
+            gate is unmonitored. The vision service is most likely down: check
+            `docker compose ps vision` and its logs.
+
       - alert: AegisWatchlistHit
         # Counted by alert type only: the plate never reaches Prometheus or
         # Discord. The guard console has the details.
