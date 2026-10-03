@@ -38,7 +38,6 @@ import {
   VStack,
   Text,
   Icon,
-  useColorModeValue,
   Grid,
   FormControl,
   FormHelperText
@@ -172,7 +171,7 @@ const AdminDashboard: React.FC = () => {
   });
 
   // Responsive design
-  const cardBg = useColorModeValue('white', 'gray.700');
+  const cardBg = 'bg.surface';
 
   // Recent alerts, and how many still await a guard's decision
   useEffect(() => {
@@ -395,15 +394,15 @@ const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <Box p={{ base: 4, md: 8 }} bg="gray.100" minH="100vh">
+    <Box p={{ base: 4, md: 8 }} minH="100vh">
       {/* Header */}
       <VStack spacing={6} align="stretch" mb={8}>
         <Box
-          bg="white"
+          bg="bg.surface"
           p={6}
           borderRadius="2xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
           <HStack justify="space-between" align="center">
             <VStack align="start" spacing={2}>
@@ -415,7 +414,7 @@ const AdminDashboard: React.FC = () => {
               >
                 Admin Dashboard
               </Heading>
-              <Text color="gray.600">
+              <Text color="text.muted">
                 System overview and management controls
               </Text>
               {loadError && (
@@ -431,8 +430,8 @@ const AdminDashboard: React.FC = () => {
                 size="sm"
                 onClick={() => window.location.reload()}
                 _hover={{
-                  bg: 'brand.50',
-                  color: 'brand.600',
+                  bg: 'tint-brand',
+                  color: 'ink-brand',
                 }}
               >
                 Refresh
@@ -449,28 +448,28 @@ const AdminDashboard: React.FC = () => {
           p={6}
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
           <HStack spacing={4}>
             <Box
               w={12}
               h={12}
               borderRadius="xl"
-              bg="brand.50"
+              bg="tint-brand"
               display="flex"
               alignItems="center"
               justifyContent="center"
               border="1px solid"
-              borderColor="brand.200"
+              borderColor="edge-brand"
             >
               <Icon as={FiUsers} w={6} h={6} color="brand.500" />
             </Box>
             <VStack align="start" spacing={1}>
               <Stat>
-                <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
+                <StatNumber fontSize="2xl" fontWeight="bold" color="text.default">
                   {loadingUsers && users.length === 0 ? '—' : users.length}
                 </StatNumber>
-                <StatLabel color="gray.600" fontSize="sm">Total Users</StatLabel>
+                <StatLabel color="text.muted" fontSize="sm">Total Users</StatLabel>
               </Stat>
             </VStack>
           </HStack>
@@ -481,28 +480,28 @@ const AdminDashboard: React.FC = () => {
           p={6}
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
           <HStack spacing={4}>
             <Box
               w={12}
               h={12}
               borderRadius="xl"
-              bg="green.50"
+              bg="tint-green"
               display="flex"
               alignItems="center"
               justifyContent="center"
               border="1px solid"
-              borderColor="green.200"
+              borderColor="edge-green"
             >
               <Icon as={FiTruck} w={6} h={6} color="green.500" />
             </Box>
             <VStack align="start" spacing={1}>
               <Stat>
-                <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
+                <StatNumber fontSize="2xl" fontWeight="bold" color="text.default">
                   {analytics.totalVehicles ?? '—'}
                 </StatNumber>
-                <StatLabel color="gray.600" fontSize="sm">Registered Vehicles</StatLabel>
+                <StatLabel color="text.muted" fontSize="sm">Registered Vehicles</StatLabel>
               </Stat>
             </VStack>
           </HStack>
@@ -513,28 +512,28 @@ const AdminDashboard: React.FC = () => {
           p={6}
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
           <HStack spacing={4}>
             <Box
               w={12}
               h={12}
               borderRadius="xl"
-              bg="red.50"
+              bg="tint-red"
               display="flex"
               alignItems="center"
               justifyContent="center"
               border="1px solid"
-              borderColor="red.200"
+              borderColor="edge-red"
             >
               <Icon as={FiAlertTriangle} w={6} h={6} color="red.500" />
             </Box>
             <VStack align="start" spacing={1}>
               <Stat>
-                <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
+                <StatNumber fontSize="2xl" fontWeight="bold" color="text.default">
                   {analytics.pendingAlerts ?? '—'}
                 </StatNumber>
-                <StatLabel color="gray.600" fontSize="sm">Pending Alerts</StatLabel>
+                <StatLabel color="text.muted" fontSize="sm">Pending Alerts</StatLabel>
               </Stat>
             </VStack>
           </HStack>
@@ -545,28 +544,28 @@ const AdminDashboard: React.FC = () => {
           p={6}
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
           <HStack spacing={4}>
             <Box
               w={12}
               h={12}
               borderRadius="xl"
-              bg="purple.50"
+              bg="tint-purple"
               display="flex"
               alignItems="center"
               justifyContent="center"
               border="1px solid"
-              borderColor="purple.200"
+              borderColor="edge-purple"
             >
               <Icon as={FiTrendingUp} w={6} h={6} color="purple.500" />
             </Box>
             <VStack align="start" spacing={1}>
               <Stat>
-                <StatNumber fontSize="2xl" fontWeight="bold" color="gray.700">
+                <StatNumber fontSize="2xl" fontWeight="bold" color="text.default">
                   {analytics.totalLogs ?? '—'}
                 </StatNumber>
-                <StatLabel color="gray.600" fontSize="sm">Recent Activities</StatLabel>
+                <StatLabel color="text.muted" fontSize="sm">Recent Activities</StatLabel>
               </Stat>
             </VStack>
           </HStack>
@@ -581,12 +580,12 @@ const AdminDashboard: React.FC = () => {
           bg={cardBg}
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
           overflow="hidden"
         >
-          <Box p={6} borderBottom="1px solid" borderColor="gray.200">
+          <Box p={6} borderBottom="1px solid" borderColor="border.default">
             <HStack justify="space-between">
-              <Heading size="md" color="gray.700">Recent Alerts</Heading>
+              <Heading size="md" color="text.default">Recent Alerts</Heading>
               <Button size="sm" variant="ghost" color="brand.500" onClick={() => navigate('/alert-history')}>
                 View All
               </Button>
@@ -599,17 +598,17 @@ const AdminDashboard: React.FC = () => {
                   key={alert.id}
                   p={4}
                   borderRadius="lg"
-                  bg="gray.50"
+                  bg="bg.subtle"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _hover={{
-                    bg: 'gray.100',
+                    bg: 'bg.muted',
                   }}
                 >
                   <HStack justify="space-between" mb={2}>
                     <HStack spacing={2}>
                       <Icon as={FiAlertTriangle} color={`${mismatchScheme(alert.mismatch_type)}.500`} />
-                      <Text fontWeight="semibold" color="gray.700">
+                      <Text fontWeight="semibold" color="text.default">
                         {alert.plate_number}
                       </Text>
                     </HStack>
@@ -617,7 +616,7 @@ const AdminDashboard: React.FC = () => {
                       {{ open: 'Open', in_progress: 'In progress', closed: 'Closed' }[alert.status] ?? alert.status}
                     </Badge>
                   </HStack>
-                  <HStack spacing={4} fontSize="sm" color="gray.600">
+                  <HStack spacing={4} fontSize="sm" color="text.muted">
                     <Text>{mismatchLabel(alert.mismatch_type)}</Text>
                     <HStack spacing={1}>
                       <Icon as={FiClock} />
@@ -626,7 +625,7 @@ const AdminDashboard: React.FC = () => {
                   </HStack>
                 </Box>
               ))}
-              {recentAlerts.length === 0 && <Text color="gray.500">No alerts yet.</Text>}
+              {recentAlerts.length === 0 && <Text color="text.muted">No alerts yet.</Text>}
             </VStack>
           </Box>
         </Box>
@@ -636,12 +635,12 @@ const AdminDashboard: React.FC = () => {
           bg={cardBg}
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
           overflow="hidden"
         >
-          <Box p={6} borderBottom="1px solid" borderColor="gray.200">
+          <Box p={6} borderBottom="1px solid" borderColor="border.default">
             <HStack justify="space-between">
-              <Heading size="md" color="gray.700">Recent Access</Heading>
+              <Heading size="md" color="text.default">Recent Access</Heading>
             </HStack>
           </Box>
           <Box p={6}>
@@ -651,26 +650,26 @@ const AdminDashboard: React.FC = () => {
                   key={log.id}
                   p={4}
                   borderRadius="lg"
-                  bg="gray.50"
+                  bg="bg.subtle"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                 >
                   <HStack justify="space-between">
                     <VStack align="start" spacing={1}>
-                      <Text fontWeight="semibold" color="gray.700">
+                      <Text fontWeight="semibold" color="text.default">
                         {log.plate_number}
                       </Text>
                       <Badge colorScheme={decisionScheme(log.action)} variant="subtle">
                         {decisionLabel(log.action)}
                       </Badge>
                     </VStack>
-                    <Text fontSize="xs" color="gray.500">
+                    <Text fontSize="xs" color="text.muted">
                       {new Date(log.timestamp).toLocaleString()}
                     </Text>
                   </HStack>
                 </Box>
               ))}
-              {logs.length === 0 && <Text color="gray.500">No access decisions yet.</Text>}
+              {logs.length === 0 && <Text color="text.muted">No access decisions yet.</Text>}
             </VStack>
           </Box>
         </Box>
@@ -683,17 +682,17 @@ const AdminDashboard: React.FC = () => {
         p={6}
         borderRadius="xl"
         border="1px solid"
-        borderColor="gray.200"
+        borderColor="border.default"
       >
-        <Heading size="md" mb={6} color="gray.700">Quick Actions</Heading>
+        <Heading size="md" mb={6} color="text.default">Quick Actions</Heading>
         <HStack spacing={4} flexWrap="wrap">
           <Button
             variant="neumorphic"
             leftIcon={<FiUsers />}
             onClick={openCreateUser}
             _hover={{
-              bg: 'brand.50',
-              color: 'brand.600',
+              bg: 'tint-brand',
+              color: 'ink-brand',
             }}
           >
             Add User
@@ -703,8 +702,8 @@ const AdminDashboard: React.FC = () => {
             leftIcon={<FiTruck />}
             onClick={openCreateVehicle}
             _hover={{
-              bg: 'brand.50',
-              color: 'brand.600',
+              bg: 'tint-brand',
+              color: 'ink-brand',
             }}
           >
             Register Vehicle
@@ -714,8 +713,8 @@ const AdminDashboard: React.FC = () => {
             leftIcon={<FiActivity />}
             onClick={() => navigate('/analytics')}
             _hover={{
-              bg: 'brand.50',
-              color: 'brand.600',
+              bg: 'tint-brand',
+              color: 'ink-brand',
             }}
           >
             System Reports
@@ -725,8 +724,8 @@ const AdminDashboard: React.FC = () => {
             leftIcon={<FiRefreshCw />}
             onClick={() => window.location.reload()}
             _hover={{
-              bg: 'brand.50',
-              color: 'brand.600',
+              bg: 'tint-brand',
+              color: 'ink-brand',
             }}
           >
             Refresh Data
@@ -748,7 +747,7 @@ const AdminDashboard: React.FC = () => {
             <Flex direction={{ base: 'column', md: 'row' }} mb={4} gap={4}>
               <Button colorScheme="blue" onClick={openCreateUser}>Add User</Button>
               <Spacer />
-              <Text fontSize="sm" color="gray.600">
+              <Text fontSize="sm" color="text.muted">
                 Showing {users.length} users ({users.filter(u => u.is_active).length} active)
               </Text>
             </Flex>
@@ -818,7 +817,7 @@ const AdminDashboard: React.FC = () => {
             <Flex direction={{ base: 'column', md: 'row' }} mb={4} gap={4}>
               <Button colorScheme="green" onClick={openCreateVehicle}>Add Vehicle</Button>
               <Spacer />
-              <Text fontSize="sm" color="gray.600">
+              <Text fontSize="sm" color="text.muted">
                 Showing {vehicles.length} vehicles
               </Text>
             </Flex>
@@ -876,7 +875,7 @@ const AdminDashboard: React.FC = () => {
             <Flex direction={{ base: 'column', md: 'row' }} mb={4} gap={4}>
               <Heading size="md">Access Logs</Heading>
               <Spacer />
-              <Text fontSize="sm" color="gray.600">
+              <Text fontSize="sm" color="text.muted">
                 Showing {logs.length} recent logs
               </Text>
             </Flex>
@@ -929,29 +928,29 @@ const AdminDashboard: React.FC = () => {
         <ModalContent
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
-          <ModalHeader color="gray.700">
+          <ModalHeader color="text.default">
             {editingUser ? 'Edit User' : 'Create User'}
           </ModalHeader>
           <ModalBody>
             <VStack spacing={4}>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Full Name</FormLabel>
+                <FormLabel color="text.default">Full Name</FormLabel>
                 <Input
                   name="full_name"
                   value={userForm.full_name}
                   onChange={handleUserFormChange}
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'brand.400',
                   }}
                 />
               </FormControl>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Email</FormLabel>
+                <FormLabel color="text.default">Email</FormLabel>
                 <Input
                   name="email"
                   type="email"
@@ -960,7 +959,7 @@ const AdminDashboard: React.FC = () => {
                   onChange={handleUserFormChange}
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'brand.400',
                   }}
@@ -968,7 +967,7 @@ const AdminDashboard: React.FC = () => {
               </FormControl>
               {!editingUser && (
                 <FormControl isRequired>
-                  <FormLabel color="gray.700">Password</FormLabel>
+                  <FormLabel color="text.default">Password</FormLabel>
                   <Input
                     name="password"
                     type="password"
@@ -977,7 +976,7 @@ const AdminDashboard: React.FC = () => {
                     onChange={handleUserFormChange}
                     borderRadius="lg"
                     border="1px solid"
-                    borderColor="gray.200"
+                    borderColor="border.default"
                     _focus={{
                       borderColor: 'brand.400',
                     }}
@@ -985,14 +984,14 @@ const AdminDashboard: React.FC = () => {
                 </FormControl>
               )}
               <FormControl isRequired>
-                <FormLabel color="gray.700">Role</FormLabel>
+                <FormLabel color="text.default">Role</FormLabel>
                 <Select
                   name="role"
                   value={userForm.role}
                   onChange={handleUserFormChange}
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'brand.400',
                   }}
@@ -1014,8 +1013,8 @@ const AdminDashboard: React.FC = () => {
                 colorScheme="brand"
                 onClick={handleUserSubmit}
                 _hover={{
-                  bg: 'brand.50',
-                  color: 'brand.600',
+                  bg: 'tint-brand',
+                  color: 'ink-brand',
                 }}
               >
                 {editingUser ? 'Update' : 'Create'}
@@ -1031,71 +1030,71 @@ const AdminDashboard: React.FC = () => {
         <ModalContent
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
-          <ModalHeader color="gray.700">
+          <ModalHeader color="text.default">
             {editingVehicle ? 'Edit Vehicle' : 'Register Vehicle'}
           </ModalHeader>
           <ModalBody>
             <VStack spacing={4}>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Plate Number</FormLabel>
+                <FormLabel color="text.default">Plate Number</FormLabel>
                 <Input
                   name="plate_number"
                   value={vehicleForm.plate_number}
                   onChange={handleVehicleFormChange}
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'brand.400',
                   }}
                 />
               </FormControl>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Make</FormLabel>
+                <FormLabel color="text.default">Make</FormLabel>
                 <Input
                   name="make"
                   value={vehicleForm.make}
                   onChange={handleVehicleFormChange}
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'brand.400',
                   }}
                 />
               </FormControl>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Model</FormLabel>
+                <FormLabel color="text.default">Model</FormLabel>
                 <Input
                   name="model"
                   value={vehicleForm.model}
                   onChange={handleVehicleFormChange}
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'brand.400',
                   }}
                 />
               </FormControl>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Color</FormLabel>
+                <FormLabel color="text.default">Color</FormLabel>
                 <Input
                   name="color"
                   value={vehicleForm.color}
                   onChange={handleVehicleFormChange}
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'brand.400',
                   }}
                 />
               </FormControl>
               <FormControl>
-                <FormLabel color="gray.700">Type</FormLabel>
+                <FormLabel color="text.default">Type</FormLabel>
                 <Input
                   name="vehicle_type"
                   list="vehicle-types"
@@ -1110,7 +1109,7 @@ const AdminDashboard: React.FC = () => {
                 <FormHelperText>Compared with the detected type to flag mismatches.</FormHelperText>
               </FormControl>
               <FormControl>
-                <FormLabel color="gray.700">Owner</FormLabel>
+                <FormLabel color="text.default">Owner</FormLabel>
                 <Select name="owner_id" value={vehicleForm.owner_id} onChange={handleVehicleFormChange} borderRadius="lg">
                   <option value="">No owner</option>
                   {users.filter(u => u.is_active || u.id === vehicleForm.owner_id).map(u => (
@@ -1130,8 +1129,8 @@ const AdminDashboard: React.FC = () => {
                 colorScheme="brand"
                 onClick={handleVehicleSubmit}
                 _hover={{
-                  bg: 'brand.50',
-                  color: 'brand.600',
+                  bg: 'tint-brand',
+                  color: 'ink-brand',
                 }}
               >
                 {editingVehicle ? 'Update' : 'Register'}

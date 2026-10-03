@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Badge, Box, Button, Card, CardBody, CardHeader, Flex, Grid, Heading, HStack, Icon, Text, VStack,
-  useColorModeValue,
-} from '@chakra-ui/react';
+  } from '@chakra-ui/react';
 import { FiCamera, FiEye } from 'react-icons/fi';
 import api from '../api';
 import { asArray } from '../utils/safe';
@@ -28,8 +27,8 @@ const CameraPanel: React.FC = () => {
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const viewRef = useRef<HTMLDivElement>(null);
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const bgColor = 'bg.surface';
+  const borderColor = 'border.default';
 
   useEffect(() => {
     let cancelled = false;
@@ -126,7 +125,7 @@ const CameraPanel: React.FC = () => {
                 style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
               />
             ) : (
-              <VStack spacing={3} color="gray.400" p={6} textAlign="center">
+              <VStack spacing={3} color="text.subtle" p={6} textAlign="center">
                 <Icon as={FiCamera} w={16} h={16} />
                 <Text fontSize="lg" fontWeight="bold">
                   {!loaded ? 'Loading cameras…' : camera ? `${camera.name} is offline` : 'No cameras reporting'}
@@ -141,7 +140,7 @@ const CameraPanel: React.FC = () => {
           </Box>
 
           <VStack spacing={4} align="stretch">
-            <Text fontWeight="bold" color="gray.700">Cameras</Text>
+            <Text fontWeight="bold" color="text.default">Cameras</Text>
             {cameras.map(c => (
               <Box
                 as="button"
@@ -151,7 +150,7 @@ const CameraPanel: React.FC = () => {
                 borderColor={borderColor}
                 borderRadius="lg"
                 textAlign="left"
-                bg={selected === c.id ? 'blue.50' : bgColor}
+                bg={selected === c.id ? 'tint-blue' : bgColor}
                 aria-pressed={selected === c.id}
                 onClick={() => setSelected(c.id)}
               >
@@ -164,7 +163,7 @@ const CameraPanel: React.FC = () => {
               </Box>
             ))}
             {loaded && cameras.length === 0 && (
-              <Text fontSize="sm" color="gray.500">None yet.</Text>
+              <Text fontSize="sm" color="text.muted">None yet.</Text>
             )}
           </VStack>
         </Grid>

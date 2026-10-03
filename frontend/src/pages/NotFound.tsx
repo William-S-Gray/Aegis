@@ -6,14 +6,14 @@ const NotFound: React.FC = () => (
     <VStack
       align="stretch"
       spacing={4}
-      bg="white"
+      bg="bg.surface"
       p={8}
       borderRadius="xl"
       border="1px solid"
-      borderColor="gray.200"
+      borderColor="border.default"
     >
       <Heading size="md">Page not found</Heading>
-      <Text color="gray.600">The page you are looking for does not exist or has moved.</Text>
+      <Text color="text.muted">The page you are looking for does not exist or has moved.</Text>
       <Button as={RouterLink} to="/" alignSelf="flex-start">
         Back to home
       </Button>

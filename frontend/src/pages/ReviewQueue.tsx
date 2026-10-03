@@ -84,7 +84,7 @@ const PlateCrop: React.FC<{ alertId: string; hasCrop: boolean }> = ({ alertId, h
 
   if (!src) {
     return (
-      <Text fontSize="sm" color="orange.700" mb={3}>
+      <Text fontSize="sm" color="ink-orange" mb={3}>
         No image was captured. Check the vehicle at the gate before confirming.
       </Text>
     );
@@ -190,14 +190,14 @@ const ReviewQueue: React.FC = () => {
         </Button>
       </Flex>
 
-      <Text color="gray.600" mb={6}>
+      <Text color="text.muted" mb={6}>
         Reads the detector was not confident enough to act on alone. Confirm or correct
         each plate; the system re-checks it against the vehicle register.
       </Text>
 
       {error && (
-        <Box mb={4} p={3} bg="red.50" borderRadius="md" border="1px solid" borderColor="red.200">
-          <Text color="red.700" fontSize="sm">
+        <Box mb={4} p={3} bg="tint-red" borderRadius="md" border="1px solid" borderColor="edge-red">
+          <Text color="ink-red" fontSize="sm">
             {error}
           </Text>
         </Box>
@@ -206,10 +206,10 @@ const ReviewQueue: React.FC = () => {
       {!error && alerts.length === 0 && (
         <Box
           p={10}
-          bg="white"
+          bg="bg.surface"
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
           textAlign="center"
         >
           <Center mb={3}>
@@ -218,7 +218,7 @@ const ReviewQueue: React.FC = () => {
           <Heading size="sm" mb={1}>
             Nothing waiting
           </Heading>
-          <Text color="gray.600" fontSize="sm">
+          <Text color="text.muted" fontSize="sm">
             Every detection has been confirmed.
           </Text>
         </Box>
@@ -228,11 +228,11 @@ const ReviewQueue: React.FC = () => {
         {alerts.map((alert) => (
           <Box
             key={alert.id}
-            bg="white"
+            bg="bg.surface"
             p={5}
             borderRadius="xl"
             border="1px solid"
-            borderColor="gray.200"
+            borderColor="border.default"
           >
             <Flex justify="space-between" align="flex-start" wrap="wrap" gap={3} mb={3}>
               <Box>
@@ -244,7 +244,7 @@ const ReviewQueue: React.FC = () => {
                     {REASON_LABEL[alert.review_reason ?? ''] ?? 'Needs review'}
                   </Badge>
                 </HStack>
-                <Text fontSize="sm" color="gray.500">
+                <Text fontSize="sm" color="text.muted">
                   {new Date(alert.timestamp).toLocaleString()}
                   {alert.detector_name
                     ? ` · ${alert.detector_name} ${alert.detector_version ?? ''}`
@@ -253,7 +253,7 @@ const ReviewQueue: React.FC = () => {
               </Box>
 
               <Box minW="180px">
-                <Text fontSize="xs" color="gray.600" mb={1}>
+                <Text fontSize="xs" color="text.muted" mb={1}>
                   Plate confidence: {toPercent(alert.plate_confidence) ?? '—'}%
                 </Text>
                 <Progress
@@ -269,13 +269,13 @@ const ReviewQueue: React.FC = () => {
 
             <HStack spacing={8} mb={4} fontSize="sm" wrap="wrap">
               <Box>
-                <Text color="gray.500">Detected</Text>
+                <Text color="text.muted">Detected</Text>
                 <Text>
                   {[alert.detected_color, alert.detected_type].filter(Boolean).join(' ') || '—'}
                 </Text>
               </Box>
               <Box>
-                <Text color="gray.500">Registered</Text>
+                <Text color="text.muted">Registered</Text>
                 <Text>
                   {[alert.registered_color, alert.registered_type].filter(Boolean).join(' ') ||
                     'Not registered'}
@@ -305,7 +305,7 @@ const ReviewQueue: React.FC = () => {
               </Button>
               {asArray<string>(alert.suggested_plates).length > 0 && (
                 <HStack spacing={2}>
-                  <Text fontSize="sm" color="gray.600">
+                  <Text fontSize="sm" color="text.muted">
                     Did you mean:
                   </Text>
                   {asArray<string>(alert.suggested_plates).map((plate) => (

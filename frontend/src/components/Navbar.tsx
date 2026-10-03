@@ -4,7 +4,7 @@ import {
   Text, Avatar, Menu, MenuButton, MenuList, MenuItem, MenuDivider,
   Badge, IconButton, useDisclosure, Drawer, DrawerBody, DrawerHeader,
   DrawerOverlay, DrawerContent, DrawerCloseButton, useBreakpointValue,
-  Divider, Tooltip, useColorModeValue, useToast, Icon
+  Divider, Tooltip, useToast, Icon, useColorMode
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
@@ -14,7 +14,7 @@ import { API_BASE_URL } from '../config';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import type { LinkProps as RouterLinkProps } from 'react-router-dom';
 import {
-  FiUser, FiLogOut, FiMenu, FiActivity, FiWifi, FiWifiOff, FiBattery, FiChevronDown,
+  FiUser, FiLogOut, FiMenu, FiActivity, FiMoon, FiSun, FiWifi, FiWifiOff, FiBattery, FiChevronDown,
 } from 'react-icons/fi';
 
 type Health = 'online' | 'offline' | 'unknown';
@@ -27,6 +27,7 @@ const LinkWithRef = React.forwardRef<HTMLAnchorElement, RouterLinkProps>((props,
 
 const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
+  const { colorMode, toggleColorMode } = useColorMode();
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
@@ -36,9 +37,9 @@ const Navbar: React.FC = () => {
   const isMobile = useBreakpointValue({ base: true, md: false });
   
   // Theme colors
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
-  const textColor = useColorModeValue('gray.700', 'gray.200');
+  const bgColor = 'bg.surface';
+  const borderColor = 'border.default';
+  const textColor = 'text.default';
 
   // Live health, polled. Unknown is shown as grey, never as a hopeful green:
   // a guard must not see "online" for a system that is down.
@@ -182,7 +183,7 @@ const Navbar: React.FC = () => {
                     h={4} 
                     color={HEALTH_COLOR[systemStatus.cameras]} 
                   />
-                  <Text fontSize="xs" color="gray.500" display={{ base: 'none', '2xl': 'inline' }}>Cameras</Text>
+                  <Text fontSize="xs" color="text.muted" display={{ base: 'none', '2xl': 'inline' }}>Cameras</Text>
                 </HStack>
               </Tooltip>
               )}
@@ -195,7 +196,7 @@ const Navbar: React.FC = () => {
                     h={4} 
                     color={HEALTH_COLOR[systemStatus.database]} 
                   />
-                  <Text fontSize="xs" color="gray.500" display={{ base: 'none', '2xl': 'inline' }}>DB</Text>
+                  <Text fontSize="xs" color="text.muted" display={{ base: 'none', '2xl': 'inline' }}>DB</Text>
                 </HStack>
               </Tooltip>
               
@@ -207,7 +208,7 @@ const Navbar: React.FC = () => {
                     h={4} 
                     color={HEALTH_COLOR[systemStatus.api]} 
                   />
-                  <Text fontSize="xs" color="gray.500" display={{ base: 'none', '2xl': 'inline' }}>API</Text>
+                  <Text fontSize="xs" color="text.muted" display={{ base: 'none', '2xl': 'inline' }}>API</Text>
                 </HStack>
               </Tooltip>
             </HStack>
@@ -228,9 +229,9 @@ const Navbar: React.FC = () => {
                     py={2}
                     borderRadius="md"
                     fontWeight={active ? 'semibold' : 'medium'}
-                    bg={active ? 'brand.50' : 'transparent'}
-                    color={active ? 'brand.700' : textColor}
-                    _hover={{ bg: 'gray.100', textDecoration: 'none' }}
+                    bg={active ? 'tint-brand' : 'transparent'}
+                    color={active ? 'ink-brand' : textColor}
+                    _hover={{ bg: 'bg.muted', textDecoration: 'none' }}
                     display="flex"
                     alignItems="center"
                     gap={2}
@@ -249,6 +250,16 @@ const Navbar: React.FC = () => {
             </HStack>
           )}
 
+          <Tooltip label={colorMode === 'dark' ? 'Light mode' : 'Dark mode'}>
+            <IconButton
+              aria-label={colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              icon={<Icon as={colorMode === 'dark' ? FiSun : FiMoon} />}
+              variant="ghost"
+              mr={2}
+              onClick={toggleColorMode}
+            />
+          </Tooltip>
+
           {/* User Menu */}
           {user && (
             <Menu>
@@ -259,7 +270,7 @@ const Navbar: React.FC = () => {
                 rightIcon={<Icon as={FiChevronDown} />}
                 leftIcon={<Avatar size="sm" name={user.email} bg={`${getRoleColor(user.role)}.500`} />}
                 _hover={{
-                  bg: 'gray.50',
+                  bg: 'bg.muted',
                 }}
               >
                 <VStack spacing={0} align="start">
@@ -299,7 +310,7 @@ const Navbar: React.FC = () => {
               onClick={onOpen}
               aria-label="Open menu"
               _hover={{
-                bg: 'gray.50',
+                bg: 'bg.muted',
               }}
             />
           )}
@@ -332,9 +343,9 @@ const Navbar: React.FC = () => {
                       p={4}
                       borderRadius="lg"
                       fontWeight={active ? 'semibold' : 'medium'}
-                      bg={active ? 'brand.50' : 'transparent'}
-                      color={active ? 'brand.700' : textColor}
-                      _hover={{ bg: 'gray.100', textDecoration: 'none' }}
+                      bg={active ? 'tint-brand' : 'transparent'}
+                      color={active ? 'ink-brand' : textColor}
+                      _hover={{ bg: 'bg.muted', textDecoration: 'none' }}
                       display="flex"
                       alignItems="center"
                       gap={3}
@@ -362,8 +373,8 @@ const Navbar: React.FC = () => {
                   handleLogout();
                 }}
                 _hover={{
-                  bg: 'red.50',
-                  color: 'red.600',
+                  bg: 'tint-red',
+                  color: 'ink-red',
                 }}
               >
                 Logout

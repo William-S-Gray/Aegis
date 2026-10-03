@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Box, Heading, Text, VStack, HStack, Card, CardBody, CardHeader, Badge, Button, 
   SimpleGrid, Stat, StatLabel, StatNumber, StatHelpText, Flex, 
-  useColorModeValue,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure,
   Spinner, Icon
 } from '@chakra-ui/react';
@@ -47,8 +46,8 @@ const UserPortal: React.FC = () => {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
   // Responsive design
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const bgColor = 'bg.surface';
+  const borderColor = 'border.default';
 
   // Keyed on identity, not the object: a new object for the same user must not
   // refetch and flash the spinner.
@@ -115,7 +114,7 @@ const UserPortal: React.FC = () => {
 
   if (loading) {
     return (
-      <Box p={{ base: 4, md: 8 }} bg="gray.50" minH="100vh">
+      <Box p={{ base: 4, md: 8 }} minH="100vh">
         <Flex justify="center" align="center" minH="400px">
           <VStack spacing={4}>
             <Spinner size="lg" />
@@ -127,11 +126,11 @@ const UserPortal: React.FC = () => {
   }
 
   return (
-    <Box p={{ base: 4, md: 8 }} bg="gray.50" minH="100vh">
+    <Box p={{ base: 4, md: 8 }} minH="100vh">
       {/* Header */}
       <VStack spacing={4} mb={8} align="stretch">
         <Heading size="lg">Welcome, {user?.email}</Heading>
-        <Text color="gray.600">Manage your vehicles and view access history</Text>
+        <Text color="text.muted">Manage your vehicles and view access history</Text>
       </VStack>
 
       {/* Stats Overview */}
@@ -139,7 +138,7 @@ const UserPortal: React.FC = () => {
         <Card bg={bgColor} border="1px" borderColor={borderColor}>
           <CardBody>
             <Stat>
-              <StatLabel color="gray.600">
+              <StatLabel color="text.muted">
                 <HStack spacing={2}>
                   <Icon as={FiTruck} />
                   <Text>My Vehicles</Text>
@@ -154,7 +153,7 @@ const UserPortal: React.FC = () => {
         <Card bg={bgColor} border="1px" borderColor={borderColor}>
           <CardBody>
             <Stat>
-              <StatLabel color="gray.600">
+              <StatLabel color="text.muted">
                 <HStack spacing={2}>
                   <Icon as={FiShield} />
                   <Text>Total Accesses</Text>
@@ -169,7 +168,7 @@ const UserPortal: React.FC = () => {
         <Card bg={bgColor} border="1px" borderColor={borderColor}>
           <CardBody>
             <Stat>
-              <StatLabel color="gray.600">
+              <StatLabel color="text.muted">
                 <HStack spacing={2}>
                   <Icon as={FiCalendar} />
                   <Text>This Month</Text>
@@ -184,7 +183,7 @@ const UserPortal: React.FC = () => {
         <Card bg={bgColor} border="1px" borderColor={borderColor}>
           <CardBody>
             <Stat>
-              <StatLabel color="gray.600">
+              <StatLabel color="text.muted">
                 <HStack spacing={2}>
                   <Icon as={FiClock} />
                   <Text>Last Access</Text>
@@ -212,9 +211,9 @@ const UserPortal: React.FC = () => {
           <CardBody>
             {vehicles.length === 0 ? (
               <VStack spacing={4} py={8}>
-                <Icon as={FiTruck} w={8} h={8} color="gray.400" />
-                <Text color="gray.500">No vehicles registered</Text>
-                <Text fontSize="sm" color="gray.400">Contact admin to register your vehicle</Text>
+                <Icon as={FiTruck} w={8} h={8} color="text.subtle" />
+                <Text color="text.muted">No vehicles registered</Text>
+                <Text fontSize="sm" color="text.subtle">Contact admin to register your vehicle</Text>
               </VStack>
             ) : (
               <VStack spacing={4} align="stretch">
@@ -223,7 +222,7 @@ const UserPortal: React.FC = () => {
                     key={vehicle.id} 
                     variant="outline" 
                     cursor="pointer"
-                    _hover={{ bg: 'gray.50' }}
+                    _hover={{ bg: 'bg.muted' }}
                     onClick={() => handleVehicleClick(vehicle)}
                   >
                     <CardBody>
@@ -233,10 +232,10 @@ const UserPortal: React.FC = () => {
                             <Text fontWeight="bold" fontSize="lg">{vehicle.plate_number}</Text>
                             <Badge colorScheme="blue" variant="subtle">Active</Badge>
                           </HStack>
-                          <Text color="gray.600">{vehicle.make} {vehicle.model}</Text>
+                          <Text color="text.muted">{vehicle.make} {vehicle.model}</Text>
                           <HStack spacing={2}>
                             <Box w={3} h={3} bg={vehicle.color?.toLowerCase() ?? 'gray.300'} borderRadius="full" />
-                            <Text fontSize="sm" color="gray.500">{vehicle.color ?? 'Colour not recorded'}</Text>
+                            <Text fontSize="sm" color="text.muted">{vehicle.color ?? 'Colour not recorded'}</Text>
                           </HStack>
                         </VStack>
                         <Button size="sm" colorScheme="blue" variant="ghost">
@@ -264,9 +263,9 @@ const UserPortal: React.FC = () => {
           <CardBody>
             {accessLogs.length === 0 ? (
               <VStack spacing={4} py={8}>
-                <Icon as={FiClock} w={8} h={8} color="gray.400" />
-                <Text color="gray.500">No access history</Text>
-                <Text fontSize="sm" color="gray.400">Your vehicle access logs will appear here</Text>
+                <Icon as={FiClock} w={8} h={8} color="text.subtle" />
+                <Text color="text.muted">No access history</Text>
+                <Text fontSize="sm" color="text.subtle">Your vehicle access logs will appear here</Text>
               </VStack>
             ) : (
               <VStack spacing={3} align="stretch">
@@ -276,7 +275,7 @@ const UserPortal: React.FC = () => {
                     justify="space-between" 
                     align="center" 
                     p={3} 
-                    bg="gray.50" 
+                    bg="bg.subtle" 
                     borderRadius="md"
                   >
                     <HStack spacing={3}>
@@ -285,7 +284,7 @@ const UserPortal: React.FC = () => {
                       </Badge>
                       <Text fontWeight="medium">{log.plate_number}</Text>
                     </HStack>
-                    <Text fontSize="sm" color="gray.500">
+                    <Text fontSize="sm" color="text.muted">
                       {new Date(log.timestamp).toLocaleDateString()}
                     </Text>
                   </Flex>
@@ -319,19 +318,19 @@ const UserPortal: React.FC = () => {
                   <CardBody>
                     <SimpleGrid columns={2} spacing={4}>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Plate Number</Text>
+                        <Text fontSize="sm" color="text.muted">Plate Number</Text>
                         <Text fontWeight="bold">{selectedVehicle.plate_number}</Text>
                       </Box>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Make</Text>
+                        <Text fontSize="sm" color="text.muted">Make</Text>
                         <Text>{selectedVehicle.make}</Text>
                       </Box>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Model</Text>
+                        <Text fontSize="sm" color="text.muted">Model</Text>
                         <Text>{selectedVehicle.model}</Text>
                       </Box>
                       <Box>
-                        <Text fontSize="sm" color="gray.600">Color</Text>
+                        <Text fontSize="sm" color="text.muted">Color</Text>
                         <HStack spacing={2}>
                           <Box w={3} h={3} bg={selectedVehicle.color?.toLowerCase() ?? 'gray.300'} borderRadius="full" />
                           <Text>{selectedVehicle.color ?? 'Not recorded'}</Text>

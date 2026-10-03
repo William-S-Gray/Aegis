@@ -55,3 +55,38 @@ describe('Navbar system status', () => {
     expect(screen.queryByText(/maintenance scheduled/i)).not.toBeInTheDocument();
   });
 });
+
+describe('Navbar for a guard', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('min-width') && !query.includes('max-width'),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+    vi.spyOn(api, 'get').mockResolvedValue({ data: [] } as never);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+  });
+
+  it('links every page a guard uses, including alert history', () => {
+    renderNavbar();
+    for (const name of ['Gate', 'Plate review', 'Alert history']) {
+      expect(screen.getByRole('link', { name: new RegExp(`^${name}`) })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole('link', { name: /^Analytics/ })).toBeNull();
+  });
+
+  it('switches between light and dark mode', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    renderNavbar();
+    const toggle = screen.getByRole('button', { name: /switch to (dark|light) mode/i });
+    const before = toggle.getAttribute('aria-label');
+    await userEvent.click(toggle);
+    expect(screen.getByRole('button', { name: /switch to (dark|light) mode/i }).getAttribute('aria-label')).not.toBe(before);
+  });
+});

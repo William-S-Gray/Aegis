@@ -1,12 +1,12 @@
 import React from 'react';
-import { Box, Heading, Text, Button, Stack, VStack, Icon, useColorModeValue } from '@chakra-ui/react';
+import { Box, Heading, Text, Button, Stack, VStack, Icon } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { Link as RouterLink } from 'react-router-dom';
 import { FiShield, FiUsers, FiTruck, FiActivity } from 'react-icons/fi';
 
 const Home: React.FC = () => {
   const { user } = useAuth();
-  const bgColor = useColorModeValue('gray.100', 'gray.800');
+  const bgColor = 'bg.canvas';
 
   const features = [
     {
@@ -36,11 +36,11 @@ const Home: React.FC = () => {
       {/* Hero Section */}
       <VStack spacing={8} textAlign="center" mb={16}>
         <Box
-          bg="white"
+          bg="bg.surface"
           p={8}
           borderRadius="2xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
           maxW="4xl"
           w="full"
         >
@@ -53,10 +53,10 @@ const Home: React.FC = () => {
           >
             Welcome to Aegis
           </Heading>
-          <Text fontSize="xl" color="gray.600" mb={8}>
+          <Text fontSize="xl" color="text.muted" mb={8}>
             Intelligent Vehicle Access Management System
           </Text>
-          <Text fontSize="lg" color="gray.500" mb={8}>
+          <Text fontSize="lg" color="text.muted" mb={8}>
             Experience the future of security with our advanced license plate recognition technology, 
             real-time monitoring, and comprehensive access control management.
           </Text>
@@ -69,8 +69,8 @@ const Home: React.FC = () => {
               variant="neumorphic"
               colorScheme="brand"
               _hover={{
-                bg: 'brand.50',
-                color: 'brand.600',
+                bg: 'tint-brand',
+                color: 'ink-brand',
               }}
             >
               Get Started
@@ -85,8 +85,8 @@ const Home: React.FC = () => {
                   variant="neumorphic"
                   colorScheme="brand"
                   _hover={{
-                    bg: 'brand.50',
-                    color: 'brand.600',
+                    bg: 'tint-brand',
+                    color: 'ink-brand',
                   }}
                 >
                   Admin Dashboard
@@ -100,8 +100,8 @@ const Home: React.FC = () => {
                   variant="neumorphic"
                   colorScheme="brand"
                   _hover={{
-                    bg: 'brand.50',
-                    color: 'brand.600',
+                    bg: 'tint-brand',
+                    color: 'ink-brand',
                   }}
                 >
                   Guard Dashboard
@@ -115,8 +115,8 @@ const Home: React.FC = () => {
                   variant="neumorphic"
                   colorScheme="brand"
                   _hover={{
-                    bg: 'brand.50',
-                    color: 'brand.600',
+                    bg: 'tint-brand',
+                    color: 'ink-brand',
                   }}
                 >
                   User Portal
@@ -149,11 +149,11 @@ const Home: React.FC = () => {
           {features.map((feature, index) => (
             <Box
               key={index}
-              bg="white"
+              bg="bg.surface"
               p={6}
               borderRadius="xl"
               border="1px solid"
-              borderColor="gray.200"
+              borderColor="border.default"
               textAlign="center"
             >
               <Box
@@ -162,19 +162,19 @@ const Home: React.FC = () => {
                 mx="auto"
                 mb={4}
                 borderRadius="xl"
-                bg="brand.50"
+                bg="tint-brand"
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
                 border="1px solid"
-                borderColor="brand.200"
+                borderColor="edge-brand"
               >
                 <Icon as={feature.icon} w={8} h={8} color="brand.500" />
               </Box>
-              <Heading size="md" mb={3} color="gray.700">
+              <Heading size="md" mb={3} color="text.default">
                 {feature.title}
               </Heading>
-              <Text color="gray.600" fontSize="sm">
+              <Text color="text.muted" fontSize="sm">
                 {feature.description}
               </Text>
             </Box>

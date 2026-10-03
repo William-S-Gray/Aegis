@@ -146,7 +146,7 @@ const UserAccountActions: React.FC<Props> = ({ user, isSelf, onDeleted }) => {
               <Text mb={2}>
                 <b>{user.email}</b> will be removed and signed out everywhere. This cannot be undone.
               </Text>
-              <Text fontSize="sm" color="gray.600">
+              <Text fontSize="sm" color="text.muted">
                 Their past gate decisions and alert notes stay, but without their name. To keep
                 history attributed, use <b>Deactivate</b> instead.
               </Text>

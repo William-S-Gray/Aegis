@@ -48,7 +48,7 @@ const VisitHistory: React.FC = () => {
         <Stat><StatLabel>Median stay</StatLabel><StatNumber>{median == null ? '—' : `${median} min`}</StatNumber></Stat>
       </HStack>
       {visits.length === 0 ? (
-        <Text color="gray.500">No visits in this period (needs cameras tagged entry and exit).</Text>
+        <Text color="text.muted">No visits in this period (needs cameras tagged entry and exit).</Text>
       ) : (
         <Table size="sm">
           <Thead><Tr><Th>Plate</Th><Th>In</Th><Th>Out</Th><Th isNumeric>Minutes</Th></Tr></Thead>

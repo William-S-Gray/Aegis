@@ -12,7 +12,6 @@ import {
   InputGroup,
   InputRightElement,
   IconButton,
-  useColorModeValue,
   HStack,
   Divider,
   Icon
@@ -32,7 +31,7 @@ const Login: React.FC = () => {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const bgColor = useColorModeValue('gray.100', 'gray.800');
+  const bgColor = 'bg.canvas';
 
   // Signed in (just now, or already): go back to the page that sent them
   // here, else to their own start page rather than the public home page.
@@ -92,11 +91,11 @@ const Login: React.FC = () => {
       p={4}
     >
       <Box
-        bg="white"
+        bg="bg.surface"
         p={8}
         borderRadius="2xl"
         border="1px solid"
-        borderColor="gray.200"
+        borderColor="border.default"
         w="full"
         maxW="md"
       >
@@ -106,12 +105,12 @@ const Login: React.FC = () => {
             w={20}
             h={20}
             borderRadius="xl"
-            bg="brand.50"
+            bg="tint-brand"
             display="flex"
             alignItems="center"
             justifyContent="center"
             border="1px solid"
-            borderColor="brand.200"
+            borderColor="edge-brand"
           >
             <Icon as={FiShield} w={10} h={10} color="brand.500" />
           </Box>
@@ -125,7 +124,7 @@ const Login: React.FC = () => {
             >
               Welcome Back
             </Heading>
-            <Text color="gray.600" textAlign="center">
+            <Text color="text.muted" textAlign="center">
               Sign in to access your Aegis dashboard
             </Text>
           </VStack>
@@ -135,7 +134,7 @@ const Login: React.FC = () => {
         <form onSubmit={handleSubmit}>
           <VStack spacing={6}>
             <FormControl isRequired>
-              <FormLabel color="gray.700" display="flex" alignItems="center" gap={2}>
+              <FormLabel color="text.default" display="flex" alignItems="center" gap={2}>
                 <Icon as={FiUser} color="brand.500" />
                 Email
               </FormLabel>
@@ -147,7 +146,7 @@ const Login: React.FC = () => {
                 size="lg"
                 borderRadius="lg"
                 border="1px solid"
-                borderColor="gray.200"
+                borderColor="border.default"
                 _focus={{
                   borderColor: 'brand.400',
                 }}
@@ -155,7 +154,7 @@ const Login: React.FC = () => {
             </FormControl>
 
             <FormControl isRequired>
-              <FormLabel color="gray.700" display="flex" alignItems="center" gap={2}>
+              <FormLabel color="text.default" display="flex" alignItems="center" gap={2}>
                 <Icon as={FiLock} color="brand.500" />
                 Password
               </FormLabel>
@@ -167,7 +166,7 @@ const Login: React.FC = () => {
                   placeholder="Enter your password"
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'brand.400',
                   }}
@@ -179,7 +178,7 @@ const Login: React.FC = () => {
                     onClick={() => setShowPassword(!showPassword)}
                     variant="ghost"
                     size="sm"
-                    color="gray.500"
+                    color="text.muted"
                     _hover={{ color: 'brand.500' }}
                   />
                 </InputRightElement>
@@ -195,8 +194,8 @@ const Login: React.FC = () => {
               isLoading={isLoading}
               loadingText="Signing in..."
               _hover={{
-                bg: 'brand.50',
-                color: 'brand.600',
+                bg: 'tint-brand',
+                color: 'ink-brand',
               }}
             >
               Sign In
@@ -208,7 +207,7 @@ const Login: React.FC = () => {
         {mockAuthEnabled && (
         <VStack spacing={4} mt={8}>
           <Divider />
-          <Text fontSize="sm" color="gray.600" fontWeight="medium">
+          <Text fontSize="sm" color="text.muted" fontWeight="medium">
             Demo Credentials (development only)
           </Text>
           <VStack spacing={2} w="full">
@@ -221,13 +220,13 @@ const Login: React.FC = () => {
                 onClick={() => fillDemoCredentials(cred.email, cred.password)}
                 borderRadius="lg"
                 border="1px solid"
-                borderColor="gray.200"
+                borderColor="border.default"
               >
                 <HStack spacing={2} justify="center">
                   <Text fontSize="xs" fontWeight="bold" color="brand.500">
                     {cred.role}
                   </Text>
-                  <Text fontSize="xs" color="gray.500">
+                  <Text fontSize="xs" color="text.muted">
                     {cred.email}
                   </Text>
                 </HStack>
