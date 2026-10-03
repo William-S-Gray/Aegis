@@ -77,6 +77,34 @@ tables are silently not created.
 The frontend image reads its API URL at container start rather than at build
 time, so one image promotes unchanged from staging to production.
 
+### Production: HTTPS and surviving reboots
+
+Never serve plates and passwords over plain HTTP. Put Caddy in front, which
+gets and renews certificates itself and puts the app on one origin:
+
+```bash
+# .env: AEGIS_DOMAIN=gate.example.com
+#       AEGIS_TLS=you@example.com   (public domain: Let's Encrypt)
+#       AEGIS_TLS=internal          (site LAN, no public domain: Caddy's own CA)
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+```
+
+`/api/*`, including the alert WebSocket, goes to the API and everything else
+to the frontend. The API's and frontend's own ports are closed, `/metrics`
+stays internal, HTTP redirects to HTTPS with HSTS, and only Caddy may set the
+client address the login throttle sees. With `internal`, install Caddy's root
+certificate on each guard device once; it is in the `caddy_data` volume at
+`caddy/pki/authorities/local/root.crt`. See
+[docs/operations.md](docs/operations.md#https).
+
+Every service restarts on failure (`restart: unless-stopped`), but only if
+Docker itself starts at boot. On many desktops it starts on first use instead,
+which after a power cut leaves the gates down until someone logs in:
+
+```bash
+sudo systemctl enable docker.service containerd.service
+```
+
 ## Local development
 
 ```bash
@@ -173,6 +201,9 @@ marked **DECISION** are not engineering questions.
    a decision only you can make.
 4. **Set `BACKUP_ENCRYPT_TO` and `BACKUP_UPLOAD_CMD`**, and store the private
    key somewhere the backup host cannot reach.
+5. **Serve it over HTTPS and make Docker start at boot** (see
+   [Production](#production-https-and-surviving-reboots)). Then reboot the
+   host once and confirm the gates come back without anyone logging in.
 
 Do not quote an accuracy percentage. Quote the pipeline counters: what fraction
 is auto-accepted, sent to human review, and discarded as unreadable. That claim

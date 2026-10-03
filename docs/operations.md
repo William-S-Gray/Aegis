@@ -192,6 +192,41 @@ A pass names a visitor, so it is personal data:
 - **Retention:** passes are deleted `RETENTION_VISITOR_PASS_DAYS` (90) days
   after they end. The alerts they covered keep their own retention.
 
+## HTTPS
+
+`docker-compose.https.yml` adds Caddy as the only published service (ports 80
+and 443; `HTTP_PORT`/`HTTPS_PORT` to change them). Configuration is in
+`deploy/Caddyfile`.
+
+- **Public domain:** point DNS at the host, open ports 80 and 443, and set
+  `AEGIS_TLS` to an email address. Caddy gets a Let's Encrypt certificate on
+  first start and renews it itself.
+- **Site LAN, no domain:** set `AEGIS_TLS=internal`. Caddy runs its own CA.
+  Copy its root certificate off the host and install it on every guard device
+  as a trusted root:
+
+  ```bash
+  docker compose -f docker-compose.yml -f docker-compose.https.yml \
+    cp caddy:/data/caddy/pki/authorities/local/root.crt aegis-root.crt
+  ```
+
+  The CA lives in the `caddy_data` volume. Deleting the volume makes a new
+  CA, and every device then needs the new root.
+- **Client address:** Caddy has a fixed address (172.30.57.10) on the
+  stack's network, and the overlay sets `FORWARDED_ALLOW_IPS` to it alone. Any
+  other `X-Forwarded-For` is ignored, so nobody can choose the address the
+  login throttle and audit log record.
+- **Monitoring** is unaffected: Prometheus scrapes `api:8000` on the Docker
+  network, and `/metrics` is not reachable through Caddy (only `/api/*` is
+  proxied to the API).
+
+**Checked:** behind Caddy with `AEGIS_TLS=internal`:
+- The certificate verified against Caddy's root, and HSTS was set.
+- HTTP redirected to HTTPS, and the old ports were closed.
+- Sign-in and the `wss://` alert stream worked.
+- The frontend's API URL and CSP pointed at the HTTPS origin.
+- A spoofed `X-Forwarded-For` from another container was ignored.
+
 ## Monitoring
 
 ```bash

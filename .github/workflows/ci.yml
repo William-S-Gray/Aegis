@@ -194,6 +194,18 @@ jobs:
           echo "$config" | grep -q 'VISION_ENVIRONMENT: production'
           echo "$config" | grep -q 'VISION_DETECTOR: onnx'
 
+      # The HTTPS overlay must close the API's own port and trust only Caddy.
+      - name: HTTPS overlay and Caddyfile
+        run: |
+          export POSTGRES_PASSWORD=x SECRET_KEY=x VISION_SERVICE_PASSWORD=x METRICS_TOKEN=x \
+            AEGIS_DOMAIN=gate.example.com AEGIS_TLS=internal
+          config="$(docker compose -f docker-compose.yml -f docker-compose.https.yml config --format json)"
+          echo "$config" | python3 -c "import json,sys; s=json.load(sys.stdin)['services']; \
+            assert not s['api'].get('ports') and not s['frontend'].get('ports'), 'API/frontend still published'; \
+            assert s['api']['environment']['FORWARDED_ALLOW_IPS'] == '172.30.57.10'; print('overlay OK')"
+          docker run --rm -e AEGIS_DOMAIN -e AEGIS_TLS -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+
       - name: Grafana dashboard is valid JSON
         run: python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('monitoring/grafana/dashboards/*.json')]; print('dashboards OK')"
 
