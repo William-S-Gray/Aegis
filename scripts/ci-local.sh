@@ -76,6 +76,13 @@ step compose-defaults bash -c "export POSTGRES_PASSWORD=x SECRET_KEY=x VISION_SE
   c=\$(docker compose --env-file /dev/null --profile vision config) \
   && grep -q 'ENVIRONMENT: production' <<<\"\$c\" && grep -q 'VISION_ENVIRONMENT: production' <<<\"\$c\" \
   && grep -q 'VISION_DETECTOR: onnx' <<<\"\$c\""
+step https-overlay bash -c "export POSTGRES_PASSWORD=x SECRET_KEY=x VISION_SERVICE_PASSWORD=x METRICS_TOKEN=x \
+  AEGIS_DOMAIN=gate.example.com AEGIS_TLS=internal; \
+  docker compose -f docker-compose.yml -f docker-compose.https.yml config --format json | python3 -c \"import json,sys; \
+  s=json.load(sys.stdin)['services']; assert not s['api'].get('ports') and not s['frontend'].get('ports'); \
+  assert s['api']['environment']['FORWARDED_ALLOW_IPS'] == '172.30.57.10'\" \
+  && docker run --rm -e AEGIS_DOMAIN -e AEGIS_TLS -v $ROOT/deploy/Caddyfile:/etc/caddy/Caddyfile:ro \
+  caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile"
 step grafana-dashboards python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('monitoring/grafana/dashboards/*.json')]"
 
 # --- Vision service

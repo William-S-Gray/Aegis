@@ -1,0 +1,22 @@
+# HTTPS front door for Aegis (docker-compose.https.yml).
+#
+# AEGIS_TLS is either an email address (a public domain: Let's Encrypt,
+# renewed automatically) or "internal" (a site LAN with no public domain:
+# Caddy's own CA, whose root certificate each guard device must trust once).
+
+{$AEGIS_DOMAIN} {
+	tls {$AEGIS_TLS}
+	encode zstd gzip
+
+	header Strict-Transport-Security "max-age=31536000"
+
+	# The API, including the guard-alert WebSocket under /api/v1/ws. Only
+	# /api/* reaches it, so /metrics, /health and /ready stay internal
+	# (Prometheus scrapes api:8000 on the Docker network).
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle {
+		reverse_proxy frontend:8080
+	}
+}
