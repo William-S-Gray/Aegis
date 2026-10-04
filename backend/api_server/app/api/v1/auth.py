@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -18,7 +18,7 @@ from app.core.security import (
 from app.core.state import ip_throttle, login_throttle
 from app.database import get_db
 from app.models import RefreshToken, User
-from app.schemas import LoginRequest, RefreshRequest, TokenResponse, UserPublic
+from app.schemas import LoginRequest, PasswordChange, RefreshRequest, TokenResponse, UserPublic
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -232,6 +232,61 @@ def logout(
         actor_email=current_user.email,
     )
     db.commit()
+
+
+@router.post("/password", response_model=TokenResponse)
+def change_password(
+    payload: PasswordChange,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TokenResponse:
+    """
+    Change your own password. Every other session is signed out; this one
+    gets fresh tokens, so the person carries on without signing in again.
+    """
+    # A stolen session must not become a way to guess the password.
+    throttle_key = f"password-change:{current_user.id}"
+    retry_after = login_throttle.attempt(throttle_key)
+    if retry_after:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed attempts. Try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    # 400, not 401: the session is fine, and a 401 would make the browser
+    # treat this as an expired sign-in.
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        audit.record(
+            db,
+            action="auth.password_change.failed",
+            request=request,
+            actor_id=current_user.id,
+            actor_email=current_user.email,
+        )
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose a different password")
+
+    login_throttle.reset(throttle_key)
+    current_user.hashed_password = hash_password(payload.new_password)
+    db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == current_user.id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(timezone.utc))
+    )
+    tokens = _issue_tokens(db, current_user, response, cookie=REFRESH_COOKIE in request.cookies)
+    audit.record(
+        db,
+        action="auth.password_changed",
+        request=request,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+    )
+    db.commit()
+    return tokens
 
 
 @router.get("/me", response_model=UserPublic)

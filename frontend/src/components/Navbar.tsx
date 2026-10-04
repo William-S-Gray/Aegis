@@ -10,11 +10,12 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api';
 import { asArray } from '../utils/safe';
 import { NAV, homeFor } from '../utils/nav';
+import ChangePasswordDialog from './ChangePasswordDialog';
 import { API_BASE_URL } from '../config';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import type { LinkProps as RouterLinkProps } from 'react-router-dom';
 import {
-  FiLogOut, FiMenu, FiActivity, FiMoon, FiSun, FiWifi, FiWifiOff, FiBattery, FiChevronDown,
+  FiKey, FiLogOut, FiMenu, FiActivity, FiMoon, FiSun, FiWifi, FiWifiOff, FiBattery, FiChevronDown,
 } from 'react-icons/fi';
 
 type Health = 'online' | 'offline' | 'unknown';
@@ -32,6 +33,7 @@ const Navbar: React.FC = () => {
   const location = useLocation();
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const passwordDialog = useDisclosure();
   
   // Responsive design
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -289,6 +291,9 @@ const Navbar: React.FC = () => {
                 borderColor={borderColor}
                 borderRadius="xl"
               >
+                <MenuItem icon={<Icon as={FiKey} />} onClick={passwordDialog.onOpen}>
+                  Change password
+                </MenuItem>
                 <MenuItem icon={<Icon as={FiLogOut} />} onClick={handleLogout} color="red.500">
                   Logout
                 </MenuItem>
@@ -312,6 +317,8 @@ const Navbar: React.FC = () => {
           )}
         </Flex>
       </Box>
+
+      <ChangePasswordDialog isOpen={passwordDialog.isOpen} onClose={passwordDialog.onClose} />
 
       {/* Mobile Drawer */}
       <Drawer isOpen={isOpen} placement="right" onClose={onClose}>
