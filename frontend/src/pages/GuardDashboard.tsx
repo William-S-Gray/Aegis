@@ -7,6 +7,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { guardAlertsSocketUrl } from '../config';
 import CameraPanel from '../components/CameraPanel';
+import DeviceScanner from '../components/DeviceScanner';
 import OnSiteNow from '../components/OnSiteNow';
 import db, { newClientRef } from '../db';
 import api from '../api';
@@ -15,7 +16,7 @@ import { mismatchLabel, mismatchScheme } from '../utils/labels';
 import { startOfflineSync } from '../services/OfflineSyncService';
 import {
   FiActivity, FiAlertTriangle, FiCheckCircle, FiXCircle,
-  FiCamera, FiUnlock, FiUserCheck, FiAlertOctagon
+  FiCamera, FiUnlock, FiUserCheck, FiAlertOctagon, FiSmartphone
 } from 'react-icons/fi';
 
 // Endpoints come from src/config.ts so deployments are environment-driven
@@ -68,6 +69,7 @@ const GuardDashboard: React.FC = () => {
 
   // Quick Actions Modals
   const { isOpen: isManualScanOpen, onOpen: onManualScanOpen, onClose: onManualScanClose } = useDisclosure();
+  const deviceScan = useDisclosure();
   const { isOpen: isOverrideOpen, onOpen: onOverrideOpen, onClose: onOverrideClose } = useDisclosure();
 
   // Quick Actions State
@@ -602,6 +604,9 @@ const GuardDashboard: React.FC = () => {
             </CardHeader>
             <CardBody>
               <VStack spacing={3}>
+                <Button colorScheme="brand" leftIcon={<FiSmartphone />} size="sm" w="full" onClick={deviceScan.onOpen}>
+                  Scan with this device
+                </Button>
                 <Button 
                   variant="neumorphic"
                   leftIcon={<FiCamera />}
@@ -637,8 +642,10 @@ const GuardDashboard: React.FC = () => {
       </Grid>
 
       <Box mt={6}>
-        <CameraPanel />
+        <CameraPanel onScanWithDevice={deviceScan.onOpen} />
       </Box>
+
+      <DeviceScanner isOpen={deviceScan.isOpen} onClose={deviceScan.onClose} />
 
       {/* Audio element for alerts */}
       <audio ref={audioRef} src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT" />

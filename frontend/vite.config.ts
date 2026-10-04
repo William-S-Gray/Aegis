@@ -35,7 +35,8 @@ export default defineConfig({
         // pin every returning browser to the values it first saw, whatever the
         // deployment says now. API responses are never cached either: they
         // are personal data, and stale access decisions are worse than none.
-        globIgnores: ['config.js'],
+        // The plate reader (ocr/, ~7 MB) is fetched only when someone scans.
+        globIgnores: ['config.js', 'ocr/**'],
       },
     }),
   ],

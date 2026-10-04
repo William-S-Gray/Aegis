@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Badge, Box, Button, Card, CardBody, CardHeader, Flex, Grid, Heading, HStack, Icon, Text, VStack,
-  } from '@chakra-ui/react';
-import { FiCamera, FiEye } from 'react-icons/fi';
+  useToast,
+} from '@chakra-ui/react';
+import { FiCamera, FiEye, FiRefreshCw, FiSmartphone } from 'react-icons/fi';
 import api from '../api';
-import { asArray } from '../utils/safe';
+import { apiMessage, asArray } from '../utils/safe';
 
 interface Camera {
   id: string;
@@ -21,7 +22,12 @@ const FRAME_POLL_MS = 1000;
  * guard's own session (never a bare <img src>), so no camera is reachable
  * without signing in, and camera hosts are never exposed to browsers.
  */
-const CameraPanel: React.FC = () => {
+interface Props {
+  /** Opens the device scanner: the fallback when no gate camera is working. */
+  onScanWithDevice?: () => void;
+}
+
+const CameraPanel: React.FC<Props> = ({ onScanWithDevice }) => {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
@@ -86,12 +92,38 @@ const CameraPanel: React.FC = () => {
   }, [selected, selectedOnline]);
 
   const camera = cameras.find(c => c.id === selected);
+  const toast = useToast();
+  const [restarting, setRestarting] = useState(false);
+
+  // The vision service at the gate collects the request within seconds and
+  // reconnects the camera (or starts one whose reader stopped).
+  const restart = async (cameraId?: string) => {
+    setRestarting(true);
+    try {
+      await api.post(cameraId ? `/cameras/${encodeURIComponent(cameraId)}/restart` : '/cameras/restart');
+      toast({
+        title: cameraId ? 'Camera restart requested' : 'Restart requested for all cameras',
+        description: 'The gate system reconnects within about 10 seconds. If nothing appears, check the camera and its power.',
+        status: 'info',
+      });
+    } catch (error) {
+      toast({ title: 'Restart not sent', description: apiMessage(error, 'Please try again'), status: 'error' });
+    } finally {
+      setRestarting(false);
+    }
+  };
 
   return (
     <Card bg={bgColor} border="1px" borderColor={borderColor} mb={8}>
       <CardHeader>
         <Flex justify="space-between" align="center">
           <Heading size="md">Live Camera Feeds</Heading>
+          <HStack>
+          {cameras.length > 0 && (
+            <Button variant="neumorphic" size="sm" leftIcon={<FiRefreshCw />} onClick={() => restart()} isLoading={restarting}>
+              Restart all
+            </Button>
+          )}
           <Button
             variant="neumorphic"
             size="sm"
@@ -101,6 +133,7 @@ const CameraPanel: React.FC = () => {
           >
             Fullscreen
           </Button>
+          </HStack>
         </Flex>
       </CardHeader>
       <CardBody>
@@ -132,9 +165,26 @@ const CameraPanel: React.FC = () => {
                 </Text>
                 <Text fontSize="sm">
                   {camera
-                    ? 'No frame received recently. Check the camera and the vision service.'
-                    : 'Cameras appear here once the vision service is running.'}
+                    ? 'No picture received recently. Restart it, or scan with this device meanwhile.'
+                    : "If a camera hasn't started, restart the cameras, or scan with this device meanwhile."}
                 </Text>
+                {loaded && (
+                  <HStack spacing={3} pt={2} flexWrap="wrap" justify="center">
+                    <Button
+                      size="sm"
+                      leftIcon={<FiRefreshCw />}
+                      onClick={() => restart(camera?.id)}
+                      isLoading={restarting}
+                    >
+                      {camera ? 'Restart this camera' : 'Restart cameras'}
+                    </Button>
+                    {onScanWithDevice && (
+                      <Button size="sm" colorScheme="brand" leftIcon={<FiSmartphone />} onClick={onScanWithDevice}>
+                        Scan with this device
+                      </Button>
+                    )}
+                  </HStack>
+                )}
               </VStack>
             )}
           </Box>

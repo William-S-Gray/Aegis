@@ -483,3 +483,29 @@ class TestCameraPreview:
         monkeypatch.setattr(cameras, "STALE_AFTER_SECONDS", 0)
         assert client.get("/api/v1/cameras", headers=guard).json()[0]["online"] is False
         assert client.get("/api/v1/cameras/main-gate/frame", headers=guard).status_code == 404
+
+
+class TestCameraRestart:
+    """A guard asks; the vision service collects the request over its own connection."""
+
+    def test_a_guard_requests_a_restart_and_the_vision_service_collects_it_once(self, client, auth):
+        guard, service = auth(Role.GUARD)[0], auth(Role.SERVICE, "camera@aegis.example")[0]
+
+        assert client.post("/api/v1/cameras/main-gate/restart", headers=guard).status_code == 202
+        assert client.post("/api/v1/cameras/restart", headers=guard).status_code == 202
+
+        assert client.get("/api/v1/cameras/commands", headers=service).json() == {"restart": ["*", "main-gate"]}
+        assert client.get("/api/v1/cameras/commands", headers=service).json() == {"restart": []}
+
+    def test_only_staff_ask_and_only_the_vision_service_collects(self, client, auth):
+        assert client.post("/api/v1/cameras/restart", headers=auth(Role.USER)[0]).status_code == 403
+        assert client.post("/api/v1/cameras/restart", headers=auth(Role.SERVICE, "camera@aegis.example")[0]).status_code == 403
+        assert client.get("/api/v1/cameras/commands", headers=auth(Role.GUARD, "g2@aegis.example")[0]).status_code == 403
+
+    def test_an_invalid_camera_id_is_refused(self, client, auth):
+        assert client.post("/api/v1/cameras/Not_A_Camera/restart", headers=auth(Role.GUARD)[0]).status_code == 404
+
+    def test_restart_requests_are_audited(self, client, auth, db):
+        client.post("/api/v1/cameras/main-gate/restart", headers=auth(Role.ADMIN)[0])
+        entry = db.scalar(select(AuditLog).where(AuditLog.action == "camera.restart_requested"))
+        assert entry.resource_id == "main-gate"

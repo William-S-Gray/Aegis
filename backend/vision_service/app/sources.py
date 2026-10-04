@@ -65,6 +65,7 @@ class VideoSource:
         reconnect_delay_seconds: float = 5.0,
         timeout_seconds: float = 10.0,
         stop: threading.Event | None = None,
+        reconnect: threading.Event | None = None,
     ):
         self._uri = uri
         self._site_id = site_id
@@ -77,6 +78,9 @@ class VideoSource:
         # Set on shutdown. Waiting on it rather than sleeping means a camera
         # that stays down cannot keep the process from stopping.
         self._stop = stop or threading.Event()
+        # Set when a guard asks to restart this camera: drop the connection and
+        # reopen now, instead of waiting out a stalled read or a retry delay.
+        self._reconnect = reconnect or threading.Event()
 
     def frames(self) -> Iterator[Frame]:
         try:
@@ -113,12 +117,15 @@ class VideoSource:
                     return
                 # Cameras drop out; wait and retry rather than exiting.
                 logger.warning("Could not open %s; retrying", self._uri)
-                self._stop.wait(self._reconnect_delay)
+                self._wait_before_retry()
                 continue
 
             last_emit = float("-inf")
             try:
                 while True:
+                    if self._reconnect.is_set():
+                        logger.info("Reconnecting %s on request", self._uri)
+                        break
                     ok, image = capture.read()
                     if not ok:
                         logger.info("Stream %s ended or stalled", self._uri)
@@ -142,7 +149,19 @@ class VideoSource:
 
             if not self._live:
                 return
-            self._stop.wait(self._reconnect_delay)
+            self._wait_before_retry()
+
+    def _wait_before_retry(self) -> None:
+        """The usual delay, cut short by a restart request or by shutdown."""
+        deadline = time.monotonic() + self._reconnect_delay
+        # Short slices: two events cannot be waited on at once, and shutdown
+        # must never sit behind a camera that stays down.
+        while not (self._stop.is_set() or self._reconnect.is_set()):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            self._stop.wait(min(0.2, remaining))
+        self._reconnect.clear()
 
 
 def is_live(uri: str) -> bool:

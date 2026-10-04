@@ -28,7 +28,7 @@ if [ -z "$WS_ORIGIN" ] && [ -n "$API_ORIGIN" ]; then
 fi
 
 cat > /etc/nginx/conf.d/csp.inc <<CONF
-add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data:; connect-src 'self' ${API_ORIGIN} ${WS_ORIGIN}; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data:; connect-src 'self' ${API_ORIGIN} ${WS_ORIGIN}; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
 CONF
 
 echo "aegis: runtime config written to $CONFIG_PATH (API_URL=${API_URL:-<unset>})"
