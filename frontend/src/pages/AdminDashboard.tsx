@@ -45,7 +45,6 @@ import {
 import {
   FiUsers,
   FiTruck,
-  FiActivity,
   FiAlertTriangle,
   
   
@@ -54,7 +53,7 @@ import {
   
   FiClock,
 } from 'react-icons/fi';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { mockAuthEnabled } from '../config';
 import WatchlistManager from '../components/WatchlistManager';
@@ -136,6 +135,17 @@ const SAMPLE_LOGS: Log[] = [
   { id: 'sample-l2', plate_number: 'XYZ789', timestamp: new Date().toISOString(), action: 'Exit', user_id: 'sample-2', vehicle_id: 'sample-v2' },
 ];
 
+// Sections of the admin page. The open one is in the address (?tab=users),
+// so a link or a reload lands on the right section.
+const ADMIN_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'users', label: 'Users' },
+  { key: 'vehicles', label: 'Vehicles' },
+  { key: 'access-log', label: 'Access log' },
+  { key: 'watchlist', label: 'Watchlist' },
+  { key: 'visits', label: 'Visits' },
+] as const;
+
 const AdminDashboard: React.FC = () => {
   const [loadError, setLoadError] = useState('');
 
@@ -149,6 +159,10 @@ const AdminDashboard: React.FC = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
   const { user: currentUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabIndex = Math.max(0, ADMIN_TABS.findIndex(t => t.key === searchParams.get('tab')));
+  const selectTab = (index: number) =>
+    setSearchParams(index === 0 ? {} : { tab: ADMIN_TABS[index].key }, { replace: true });
   const [loadingUsers, setLoadingUsers] = useState(true);
 
   // Vehicle Management
@@ -396,54 +410,39 @@ const AdminDashboard: React.FC = () => {
   return (
     <Box p={{ base: 4, md: 8 }} minH="100vh">
       {/* Header */}
-      <VStack spacing={6} align="stretch" mb={8}>
-        <Box
-          bg="bg.surface"
-          p={6}
-          borderRadius="2xl"
-          border="1px solid"
-          borderColor="border.default"
-        >
-          <HStack justify="space-between" align="center">
-            <VStack align="start" spacing={2}>
-              <Heading 
-                size="lg"
-                bgGradient="linear(to-r, brand.500, brand.600)"
-                bgClip="text"
-                fontWeight="bold"
-              >
-                Admin Dashboard
-              </Heading>
-              <Text color="text.muted">
-                System overview and management controls
-              </Text>
-              {loadError && (
-                <Text color="red.500" fontSize="sm" fontWeight="medium">
-                  {loadError}
-                </Text>
-              )}
-            </VStack>
-            <HStack spacing={4}>
-              <Button
-                leftIcon={<FiRefreshCw />}
-                variant="neumorphic"
-                size="sm"
-                onClick={() => window.location.reload()}
-                _hover={{
-                  bg: 'tint-brand',
-                  color: 'ink-brand',
-                }}
-              >
-                Refresh
-              </Button>
-            </HStack>
-          </HStack>
+      <Flex align="center" mb={6} gap={4} wrap="wrap">
+        <Box>
+          <Heading size="lg">Administration</Heading>
+          {loadError && (
+            <Text color="red.500" fontSize="sm" fontWeight="medium" mt={1}>
+              {loadError}
+            </Text>
+          )}
         </Box>
-      </VStack>
+        <Spacer />
+        <Button leftIcon={<FiRefreshCw />} variant="neumorphic" size="sm" onClick={() => window.location.reload()}>
+          Refresh
+        </Button>
+      </Flex>
 
+      <Tabs index={tabIndex} onChange={selectTab} variant="soft-rounded" colorScheme="brand" isLazy>
+        <TabList overflowX="auto" pb={2} mb={4} gap={1}>
+          {ADMIN_TABS.map(t => (
+            <Tab key={t.key} whiteSpace="nowrap">{t.label}</Tab>
+          ))}
+        </TabList>
+        <TabPanels>
+          {/* Overview */}
+          <TabPanel px={0}>
       {/* Stats Grid */}
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
         <Box
+          as="button"
+          type="button"
+          textAlign="left"
+          aria-label="Open users"
+          onClick={() => selectTab(1)}
+          _hover={{ borderColor: 'brand.400' }}
           bg={cardBg}
           p={6}
           borderRadius="xl"
@@ -476,6 +475,12 @@ const AdminDashboard: React.FC = () => {
         </Box>
 
         <Box
+          as="button"
+          type="button"
+          textAlign="left"
+          aria-label="Open vehicles"
+          onClick={() => selectTab(2)}
+          _hover={{ borderColor: 'brand.400' }}
           bg={cardBg}
           p={6}
           borderRadius="xl"
@@ -508,6 +513,12 @@ const AdminDashboard: React.FC = () => {
         </Box>
 
         <Box
+          as="button"
+          type="button"
+          textAlign="left"
+          aria-label="Open alert history"
+          onClick={() => navigate('/alert-history')}
+          _hover={{ borderColor: 'brand.400' }}
           bg={cardBg}
           p={6}
           borderRadius="xl"
@@ -540,6 +551,12 @@ const AdminDashboard: React.FC = () => {
         </Box>
 
         <Box
+          as="button"
+          type="button"
+          textAlign="left"
+          aria-label="Open access log"
+          onClick={() => selectTab(3)}
+          _hover={{ borderColor: 'brand.400' }}
           bg={cardBg}
           p={6}
           borderRadius="xl"
@@ -675,73 +692,8 @@ const AdminDashboard: React.FC = () => {
         </Box>
       </Grid>
 
-      {/* Quick Actions */}
-      <Box
-        mt={8}
-        bg={cardBg}
-        p={6}
-        borderRadius="xl"
-        border="1px solid"
-        borderColor="border.default"
-      >
-        <Heading size="md" mb={6} color="text.default">Quick Actions</Heading>
-        <HStack spacing={4} flexWrap="wrap">
-          <Button
-            variant="neumorphic"
-            leftIcon={<FiUsers />}
-            onClick={openCreateUser}
-            _hover={{
-              bg: 'tint-brand',
-              color: 'ink-brand',
-            }}
-          >
-            Add User
-          </Button>
-          <Button
-            variant="neumorphic"
-            leftIcon={<FiTruck />}
-            onClick={openCreateVehicle}
-            _hover={{
-              bg: 'tint-brand',
-              color: 'ink-brand',
-            }}
-          >
-            Register Vehicle
-          </Button>
-          <Button
-            variant="neumorphic"
-            leftIcon={<FiActivity />}
-            onClick={() => navigate('/analytics')}
-            _hover={{
-              bg: 'tint-brand',
-              color: 'ink-brand',
-            }}
-          >
-            System Reports
-          </Button>
-          <Button
-            variant="neumorphic"
-            leftIcon={<FiRefreshCw />}
-            onClick={() => window.location.reload()}
-            _hover={{
-              bg: 'tint-brand',
-              color: 'ink-brand',
-            }}
-          >
-            Refresh Data
-          </Button>
-        </HStack>
-      </Box>
+          </TabPanel>
 
-      <Tabs variant="enclosed">
-        <TabList>
-          <Tab>Users</Tab>
-          <Tab>Vehicles</Tab>
-          <Tab>Access Logs</Tab>
-          <Tab>Watchlist</Tab>
-          <Tab>Visits</Tab>
-        </TabList>
-        <TabPanels>
           {/* Users Tab */}
           <TabPanel>
             <Flex direction={{ base: 'column', md: 'row' }} mb={4} gap={4}>

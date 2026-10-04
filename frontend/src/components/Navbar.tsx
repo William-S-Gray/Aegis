@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { 
   Box, Flex, Button, Spacer, Heading, Link as ChakraLink, HStack, VStack, 
-  Text, Avatar, Menu, MenuButton, MenuList, MenuItem, MenuDivider,
+  Text, Avatar, Menu, MenuButton, MenuList, MenuItem,
   Badge, IconButton, useDisclosure, Drawer, DrawerBody, DrawerHeader,
   DrawerOverlay, DrawerContent, DrawerCloseButton, useBreakpointValue,
   Divider, Tooltip, useToast, Icon, useColorMode
@@ -14,7 +14,7 @@ import { API_BASE_URL } from '../config';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import type { LinkProps as RouterLinkProps } from 'react-router-dom';
 import {
-  FiUser, FiLogOut, FiMenu, FiActivity, FiMoon, FiSun, FiWifi, FiWifiOff, FiBattery, FiChevronDown,
+  FiLogOut, FiMenu, FiActivity, FiMoon, FiSun, FiWifi, FiWifiOff, FiBattery, FiChevronDown,
 } from 'react-icons/fi';
 
 type Health = 'online' | 'offline' | 'unknown';
@@ -129,7 +129,7 @@ const Navbar: React.FC = () => {
     switch (role) {
       case 'admin': return 'Administrator';
       case 'guard': return 'Security Guard';
-      case 'user': return 'User';
+      case 'user': return 'Resident';
       default: return role;
     }
   };
@@ -289,10 +289,6 @@ const Navbar: React.FC = () => {
                 borderColor={borderColor}
                 borderRadius="xl"
               >
-                <MenuItem icon={<Icon as={FiUser} />} onClick={() => navigate('/user')}>
-                  My vehicles
-                </MenuItem>
-                <MenuDivider />
                 <MenuItem icon={<Icon as={FiLogOut} />} onClick={handleLogout} color="red.500">
                   Logout
                 </MenuItem>

@@ -1,188 +1,73 @@
 import React from 'react';
-import { Box, Heading, Text, Button, Stack, VStack, Icon } from '@chakra-ui/react';
-import { useAuth } from '../context/AuthContext';
+import { Box, Button, Container, Heading, Icon, SimpleGrid, Stack, Text } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
-import { FiShield, FiUsers, FiTruck, FiActivity } from 'react-icons/fi';
+import { FiArrowRight, FiCamera, FiCheckCircle, FiList } from 'react-icons/fi';
+import { useAuth } from '../context/AuthContext';
+import { homeFor } from '../utils/nav';
+
+// What happens at the gate, in the order it happens.
+const STEPS = [
+  {
+    icon: FiCamera,
+    title: 'The camera reads the plate',
+    text: 'Every vehicle that arrives at the gate is read automatically.',
+  },
+  {
+    icon: FiList,
+    title: 'Aegis checks the register',
+    text: 'Registered, visitor, wrong colour or type, or on the watchlist: the guard sees why at a glance.',
+  },
+  {
+    icon: FiCheckCircle,
+    title: 'The guard decides',
+    text: 'One tap to let in or turn away. Every decision is logged, and uncertain reads go to review.',
+  },
+];
 
 const Home: React.FC = () => {
   const { user } = useAuth();
-  const bgColor = 'bg.canvas';
-
-  const features = [
-    {
-      icon: FiShield,
-      title: 'Secure Access Control',
-      description: 'Advanced license plate recognition with real-time security monitoring'
-    },
-    {
-      icon: FiUsers,
-      title: 'Multi-Role Management',
-      description: 'Comprehensive user management for admins, guards, and regular users'
-    },
-    {
-      icon: FiTruck,
-      title: 'Vehicle Registration',
-      description: 'Complete vehicle database with owner information and access history'
-    },
-    {
-      icon: FiActivity,
-      title: 'Real-time Analytics',
-      description: 'Live dashboards with comprehensive reporting and insights'
-    }
-  ];
 
   return (
-    <Box p={{ base: 6, md: 12 }} bg={bgColor} minH="100vh">
-      {/* Hero Section */}
-      <VStack spacing={8} textAlign="center" mb={16}>
-        <Box
-          bg="bg.surface"
-          p={8}
-          borderRadius="2xl"
-          border="1px solid"
-          borderColor="border.default"
-          maxW="4xl"
-          w="full"
-        >
-          <Heading 
-            size="2xl" 
-            mb={6}
-            bgGradient="linear(to-r, brand.500, brand.600)"
-            bgClip="text"
-            fontWeight="bold"
-          >
-            Welcome to Aegis
-          </Heading>
-          <Text fontSize="xl" color="text.muted" mb={8}>
-            Intelligent Vehicle Access Management System
-          </Text>
-          <Text fontSize="lg" color="text.muted" mb={8}>
-            Experience the future of security with our advanced license plate recognition technology, 
-            real-time monitoring, and comprehensive access control management.
-          </Text>
-          
-          {!user ? (
-            <Button 
-              as={RouterLink} 
-              to="/login" 
-              size="lg"
-              variant="neumorphic"
-              colorScheme="brand"
-              _hover={{
-                bg: 'tint-brand',
-                color: 'ink-brand',
-              }}
-            >
-              Get Started
-            </Button>
-          ) : (
-            <Stack direction={{ base: 'column', md: 'row' }} spacing={4} justify="center">
-              {user.role === 'admin' && (
-                <Button 
-                  as={RouterLink} 
-                  to="/admin"
-                  size="lg"
-                  variant="neumorphic"
-                  colorScheme="brand"
-                  _hover={{
-                    bg: 'tint-brand',
-                    color: 'ink-brand',
-                  }}
-                >
-                  Admin Dashboard
-                </Button>
-              )}
-              {user.role === 'guard' && (
-                <Button 
-                  as={RouterLink} 
-                  to="/guard"
-                  size="lg"
-                  variant="neumorphic"
-                  colorScheme="brand"
-                  _hover={{
-                    bg: 'tint-brand',
-                    color: 'ink-brand',
-                  }}
-                >
-                  Guard Dashboard
-                </Button>
-              )}
-              {user.role === 'user' && (
-                <Button 
-                  as={RouterLink} 
-                  to="/user"
-                  size="lg"
-                  variant="neumorphic"
-                  colorScheme="brand"
-                  _hover={{
-                    bg: 'tint-brand',
-                    color: 'ink-brand',
-                  }}
-                >
-                  User Portal
-                </Button>
-              )}
-            </Stack>
-          )}
-        </Box>
-      </VStack>
-
-      {/* Features Section */}
-      <VStack spacing={12}>
-        <Heading 
-          size="xl" 
-          textAlign="center"
-          bgGradient="linear(to-r, brand.500, brand.600)"
-          bgClip="text"
-          fontWeight="bold"
-        >
-          Key Features
+    <Container maxW="5xl" py={{ base: 10, md: 20 }} px={{ base: 4, md: 8 }}>
+      <Stack spacing={6} textAlign="center" align="center" mb={{ base: 12, md: 20 }}>
+        <Heading as="h1" size="3xl" lineHeight="1.1" maxW="3xl">
+          Know every vehicle at your gate
         </Heading>
-        
-        <Box
-          display="grid"
-          gridTemplateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }}
-          gap={8}
-          w="full"
-          maxW="7xl"
+        <Text fontSize={{ base: 'lg', md: 'xl' }} color="text.muted" maxW="2xl">
+          Aegis reads number plates, checks them against your register and watchlist, and puts a
+          clear decision in front of the guard.
+        </Text>
+        <Button
+          as={RouterLink}
+          to={user ? homeFor(user.role) : '/login'}
+          colorScheme="brand"
+          size="lg"
+          rightIcon={<FiArrowRight />}
         >
-          {features.map((feature, index) => (
-            <Box
-              key={index}
-              bg="bg.surface"
-              p={6}
-              borderRadius="xl"
-              border="1px solid"
-              borderColor="border.default"
-              textAlign="center"
-            >
-              <Box
-                w={16}
-                h={16}
-                mx="auto"
-                mb={4}
-                borderRadius="xl"
-                bg="tint-brand"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                border="1px solid"
-                borderColor="edge-brand"
-              >
-                <Icon as={feature.icon} w={8} h={8} color="brand.500" />
+          {user ? 'Open your dashboard' : 'Sign in'}
+        </Button>
+      </Stack>
+
+      <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
+        {STEPS.map((step, i) => (
+          <Box key={step.title} bg="bg.surface" border="1px solid" borderColor="border.default" borderRadius="xl" p={6}>
+            <Stack direction="row" align="center" spacing={3} mb={3}>
+              <Box bg="tint-brand" color="ink-brand" borderRadius="lg" p={2} display="flex">
+                <Icon as={step.icon} w={5} h={5} />
               </Box>
-              <Heading size="md" mb={3} color="text.default">
-                {feature.title}
-              </Heading>
-              <Text color="text.muted" fontSize="sm">
-                {feature.description}
+              <Text fontSize="sm" fontWeight="bold" color="text.muted">
+                Step {i + 1}
               </Text>
-            </Box>
-          ))}
-        </Box>
-      </VStack>
-    </Box>
+            </Stack>
+            <Heading as="h2" size="md" mb={2}>
+              {step.title}
+            </Heading>
+            <Text color="text.muted">{step.text}</Text>
+          </Box>
+        ))}
+      </SimpleGrid>
+    </Container>
   );
 };
 
-export default Home; 
+export default Home;

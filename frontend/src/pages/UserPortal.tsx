@@ -129,9 +129,14 @@ const UserPortal: React.FC = () => {
     <Box p={{ base: 4, md: 8 }} minH="100vh">
       {/* Header */}
       <VStack spacing={4} mb={8} align="stretch">
-        <Heading size="lg">Welcome, {user?.email}</Heading>
+        <Heading size="lg">Welcome, {user?.full_name || user?.email}</Heading>
         <Text color="text.muted">Manage your vehicles and view access history</Text>
       </VStack>
+
+      {/* Visitors first: expecting someone is why a resident opens this page. */}
+      <Box mb={8}>
+        <VisitorPasses />
+      </Box>
 
       {/* Stats Overview */}
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
@@ -144,7 +149,7 @@ const UserPortal: React.FC = () => {
                   <Text>My Vehicles</Text>
                 </HStack>
               </StatLabel>
-              <StatNumber fontSize="2xl" color="blue.500">{stats.totalVehicles}</StatNumber>
+              <StatNumber fontSize="2xl">{stats.totalVehicles}</StatNumber>
               <StatHelpText>Registered vehicles</StatHelpText>
             </Stat>
           </CardBody>
@@ -159,7 +164,7 @@ const UserPortal: React.FC = () => {
                   <Text>Total Accesses</Text>
                 </HStack>
               </StatLabel>
-              <StatNumber fontSize="2xl" color="green.500">{stats.totalAccesses}</StatNumber>
+              <StatNumber fontSize="2xl">{stats.totalAccesses}</StatNumber>
               <StatHelpText>All time entries/exits</StatHelpText>
             </Stat>
           </CardBody>
@@ -174,7 +179,7 @@ const UserPortal: React.FC = () => {
                   <Text>This Month</Text>
                 </HStack>
               </StatLabel>
-              <StatNumber fontSize="2xl" color="orange.500">{stats.thisMonth}</StatNumber>
+              <StatNumber fontSize="2xl">{stats.thisMonth}</StatNumber>
               <StatHelpText>Accesses this month</StatHelpText>
             </Stat>
           </CardBody>
@@ -189,7 +194,7 @@ const UserPortal: React.FC = () => {
                   <Text>Last Access</Text>
                 </HStack>
               </StatLabel>
-              <StatNumber fontSize="2xl" color="purple.500">{stats.lastAccess}</StatNumber>
+              <StatNumber fontSize="2xl">{stats.lastAccess}</StatNumber>
               <StatHelpText>Most recent entry/exit</StatHelpText>
             </Stat>
           </CardBody>
@@ -300,7 +305,6 @@ const UserPortal: React.FC = () => {
         </Card>
       </SimpleGrid>
 
-      <VisitorPasses />
 
       {/* Vehicle Details Modal */}
       <Modal isOpen={isOpen} onClose={onClose} size="lg">
