@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.schemas.user import MAX_PASSWORD_LENGTH, UserPublic
+from app.schemas.user import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, UserPublic
 
 
 class LoginRequest(BaseModel):
@@ -36,3 +36,10 @@ class TokenResponse(BaseModel):
     refresh_token: str | None = None
     token_type: str = "bearer"
     user: UserPublic
+
+
+class PasswordChange(BaseModel):
+    """Someone changing their own password, proving they know the current one."""
+
+    current_password: str = Field(max_length=MAX_PASSWORD_LENGTH)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)

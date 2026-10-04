@@ -1,4 +1,4 @@
-from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
+from app.schemas.auth import LoginRequest, PasswordChange, RefreshRequest, TokenResponse
 from app.schemas.resources import (
     AccessLogCreate,
     AccessLogPage,
@@ -49,6 +49,7 @@ __all__ = [
     "EscalationSummary",
     "FeedbackSummary",
     "LoginRequest",
+    "PasswordChange",
     "MismatchPoint",
     "PlateConfirmation",
     "RefreshRequest",

@@ -323,3 +323,66 @@ class TestBrowserCookieSession:
 
         assert response.json()["refresh_token"]
         assert "set-cookie" not in response.headers
+
+
+class TestPasswordChange:
+    NEW = "a-fresh-passphrase-2026"
+
+    def _session(self, client, make_user):
+        make_user(email="guard@aegis.example", password=PASSWORD, role=Role.GUARD)
+        return client.post("/api/v1/auth/login", json={"email": "guard@aegis.example", "password": PASSWORD}).json()
+
+    @staticmethod
+    def _change(client, token, current, new, cookie=None):
+        headers = {"Authorization": f"Bearer {token}"}
+        if cookie:
+            headers["Cookie"] = f"aegis_refresh={cookie}"
+        return client.post("/api/v1/auth/password", headers=headers, json={"current_password": current, "new_password": new})
+
+    def test_changes_the_password_and_signs_out_other_devices(self, client, make_user, db):
+        this_device = self._session(client, make_user)
+        other_device = client.post("/api/v1/auth/login", json={"email": "guard@aegis.example", "password": PASSWORD}).json()
+
+        response = self._change(client, this_device["access_token"], PASSWORD, self.NEW)
+
+        assert response.status_code == 200 and response.json()["access_token"]
+        login = lambda pw: client.post("/api/v1/auth/login", json={"email": "guard@aegis.example", "password": pw})
+        assert login(PASSWORD).status_code == 401
+        assert login(self.NEW).status_code == 200
+        assert client.post("/api/v1/auth/refresh", json={"refresh_token": other_device["refresh_token"]}).status_code == 401
+        # This device carries on with the tokens it was just given.
+        assert client.post("/api/v1/auth/refresh", json={"refresh_token": response.json()["refresh_token"]}).status_code == 200
+        entry = db.scalar(select(AuditLog).where(AuditLog.action == "auth.password_changed"))
+        assert self.NEW not in str(entry.details) and PASSWORD not in str(entry.details)
+
+    def test_a_browser_session_gets_a_new_cookie(self, client, make_user):
+        make_user(email="guard@aegis.example", password=PASSWORD, role=Role.GUARD)
+        login = client.post("/api/v1/auth/login", json={"email": "guard@aegis.example", "password": PASSWORD, "session": "cookie"})
+        old_cookie = login.headers["set-cookie"].split(";", 1)[0].split("=", 1)[1]
+
+        response = self._change(client, login.json()["access_token"], PASSWORD, self.NEW, cookie=old_cookie)
+
+        assert response.status_code == 200
+        assert response.json()["refresh_token"] is None
+        assert "aegis_refresh=" in response.headers["set-cookie"]
+
+    def test_the_current_password_must_be_right(self, client, make_user):
+        session = self._session(client, make_user)
+        response = self._change(client, session["access_token"], "not-my-password", self.NEW)
+        # 400, not 401: the browser must not read this as an expired sign-in.
+        assert response.status_code == 400
+        assert client.post("/api/v1/auth/login", json={"email": "guard@aegis.example", "password": PASSWORD}).status_code == 200
+
+    def test_guessing_the_current_password_is_throttled(self, client, make_user):
+        session = self._session(client, make_user)
+        codes = [self._change(client, session["access_token"], f"guess-{i}", self.NEW).status_code for i in range(8)]
+        assert 429 in codes
+
+    def test_rules_for_the_new_password(self, client, make_user):
+        token = self._session(client, make_user)["access_token"]
+        assert self._change(client, token, PASSWORD, "short").status_code == 422
+        assert self._change(client, token, PASSWORD, PASSWORD).status_code == 400
+
+    def test_needs_a_signed_in_user(self, client):
+        response = client.post("/api/v1/auth/password", json={"current_password": PASSWORD, "new_password": self.NEW})
+        assert response.status_code == 401
