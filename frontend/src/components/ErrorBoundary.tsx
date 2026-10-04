@@ -43,16 +43,16 @@ class ErrorBoundary extends React.Component<Props, State> {
         <VStack
           align="stretch"
           spacing={4}
-          bg="white"
+          bg="bg.surface"
           p={8}
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
           <Heading size="md" color="red.500">
             Something went wrong on this page
           </Heading>
-          <Text color="gray.600">
+          <Text color="text.muted">
             The rest of the application is still available. You can retry this screen or head back
             to the dashboard.
           </Text>

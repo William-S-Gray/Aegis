@@ -2,8 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   Box, Heading, VStack, useToast, Button, Text, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, Badge, HStack,
   Grid, Card, CardBody, CardHeader, Flex, Spacer, Stack,
-  Progress, Icon, useColorModeValue,
-  FormControl, FormLabel, Input, Select, Textarea
+  Progress, Icon, FormControl, FormLabel, Input, Select, Textarea
 } from '@chakra-ui/react';
 import { useAuth } from '../context/AuthContext';
 import { guardAlertsSocketUrl } from '../config';
@@ -88,10 +87,10 @@ const GuardDashboard: React.FC = () => {
 
 
   // Responsive design
-  const bgColor = useColorModeValue('white', 'gray.800');
+  const bgColor = 'bg.surface';
   // Hoisted out of the alert list: hooks cannot be called inside a .map callback.
-  const alertItemBg = useColorModeValue('gray.50', 'gray.700');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const alertItemBg = 'bg.subtle';
+  const borderColor = 'border.default';
 
 
 
@@ -333,7 +332,7 @@ const GuardDashboard: React.FC = () => {
   };
 
   return (
-    <Box p={{ base: 4, md: 8 }} bg="gray.50" minH="100vh">
+    <Box p={{ base: 4, md: 8 }} minH="100vh">
       {/* Header */}
       <Flex direction={{ base: 'column', md: 'row' }} mb={6} align={{ base: 'start', md: 'center' }}>
         <Heading size="lg" mb={{ base: 4, md: 0 }}>Gate</Heading>
@@ -366,7 +365,7 @@ const GuardDashboard: React.FC = () => {
         >
           <CardHeader pb={0}>
             <Flex align="center" wrap="wrap" gap={3}>
-              <Text fontSize="sm" fontWeight="bold" color="gray.500" textTransform="uppercase" letterSpacing="wide">
+              <Text fontSize="sm" fontWeight="bold" color="text.muted" textTransform="uppercase" letterSpacing="wide">
                 At the gate
               </Text>
               {pending.length > 1 && (
@@ -423,8 +422,8 @@ const GuardDashboard: React.FC = () => {
                 )}
 
                 {alert.visitor_pass && (
-                  <Box p={3} bg="blue.50" border="1px" borderColor="blue.200" borderRadius="md">
-                    <Text color="blue.800" fontSize="sm">
+                  <Box p={3} bg="tint-blue" border="1px" borderColor="edge-blue" borderRadius="md">
+                    <Text color="inkstrong-blue" fontSize="sm">
                       Expected visitor: <b>{alert.visitor_pass.visitor_name}</b>
                       {alert.visitor_pass.host_name ? ` for ${alert.visitor_pass.host_name}` : ''}
                       {`, pass valid until ${new Date(alert.visitor_pass.valid_until).toLocaleString()}.`}
@@ -433,8 +432,8 @@ const GuardDashboard: React.FC = () => {
                 )}
 
                 {!['none', 'visitor', 'watchlist'].includes(alert.mismatch_type) && (
-                  <Box p={3} bg="red.50" border="1px" borderColor="red.200" borderRadius="md">
-                    <Text color="red.800" fontSize="sm">
+                  <Box p={3} bg="tint-red" border="1px" borderColor="edge-red" borderRadius="md">
+                    <Text color="inkstrong-red" fontSize="sm">
                       {mismatchLabel(alert.mismatch_type)}
                       {alert.mismatch_type === 'unregistered'
                         ? ' — this plate is not in the register.'
@@ -452,6 +451,8 @@ const GuardDashboard: React.FC = () => {
                 flex={1}
                 fontSize="xl"
                 leftIcon={<FiCheckCircle />}
+                // Full-strength in dark mode too: Chakra's pastel dark buttons read weakly at a glance.
+                _dark={{ bg: 'green.500', color: 'white', _hover: { bg: 'green.400' } }}
                 onClick={() => handleAction('approve')}
               >
                 Let in
@@ -463,6 +464,8 @@ const GuardDashboard: React.FC = () => {
                 flex={1}
                 fontSize="xl"
                 leftIcon={<FiXCircle />}
+                // Full-strength in dark mode too: Chakra's pastel dark buttons read weakly at a glance.
+                _dark={{ bg: 'red.500', color: 'white', _hover: { bg: 'red.400' } }}
                 onClick={() => handleAction('deny')}
               >
                 Turn away
@@ -479,7 +482,7 @@ const GuardDashboard: React.FC = () => {
         <Flex
           mb={6}
           p={4}
-          bg="white"
+          bg="bg.surface"
           border="1px"
           borderColor={borderColor}
           borderRadius="lg"
@@ -487,7 +490,7 @@ const GuardDashboard: React.FC = () => {
           gap={3}
         >
           <Icon as={FiActivity} color={wsStatus === 'connected' ? 'green.500' : 'gray.400'} />
-          <Text color="gray.600">
+          <Text color="text.muted">
             {wsStatus === 'connected'
               ? 'No vehicle waiting. New arrivals appear here with a sound.'
               : 'Reconnecting to live alerts…'}
@@ -506,9 +509,9 @@ const GuardDashboard: React.FC = () => {
           <CardBody>
             {recentAlerts.length === 0 ? (
               <VStack spacing={4} py={8}>
-                <Icon as={FiActivity} w={8} h={8} color="gray.400" />
-                <Text color="gray.500">No alerts yet.</Text>
-                <Text fontSize="sm" color="gray.400">Waiting for license plate alerts...</Text>
+                <Icon as={FiActivity} w={8} h={8} color="text.subtle" />
+                <Text color="text.muted">No alerts yet.</Text>
+                <Text fontSize="sm" color="text.subtle">Waiting for license plate alerts...</Text>
               </VStack>
             ) : (
               <VStack spacing={4} align="stretch">
@@ -539,39 +542,39 @@ const GuardDashboard: React.FC = () => {
                           </Badge>
                         )}
                       </HStack>
-                      <Text fontSize="sm" color="gray.500">
+                      <Text fontSize="sm" color="text.muted">
                         {new Date(alert.timestamp).toLocaleTimeString()}
                       </Text>
                     </Flex>
                     
                     {alert.watchlist_entry && (
-                      <Text fontSize="sm" color="red.700" fontWeight="bold" mb={1}>
+                      <Text fontSize="sm" color="ink-red" fontWeight="bold" mb={1}>
                         Watchlist: {alert.watchlist_entry.reason}
                       </Text>
                     )}
 
                     {alert.visitor_pass && (
-                      <Text fontSize="sm" color="blue.700" mb={1}>
+                      <Text fontSize="sm" color="ink-blue" mb={1}>
                         Visitor: {alert.visitor_pass.visitor_name}
                         {alert.visitor_pass.host_name ? ` (for ${alert.visitor_pass.host_name})` : ''}
                       </Text>
                     )}
 
                     {(alert.detected_type || alert.detected_color) && (
-                      <Text fontSize="sm" color="gray.600" mb={1}>
+                      <Text fontSize="sm" color="text.muted" mb={1}>
                         Detected: {[alert.detected_color, alert.detected_type].filter(Boolean).join(' ')}
                       </Text>
                     )}
 
                     {(alert.registered_type || alert.registered_color) && (
-                      <Text fontSize="sm" color="gray.600" mb={1}>
+                      <Text fontSize="sm" color="text.muted" mb={1}>
                         Registered: {[alert.registered_color, alert.registered_type].filter(Boolean).join(' ')}
                       </Text>
                     )}
 
                     {typeof alert.plate_confidence === 'number' && (
                       <Box>
-                        <Text fontSize="sm" color="gray.600" mb={1}>
+                        <Text fontSize="sm" color="text.muted" mb={1}>
                           Plate confidence: {toPercent(alert.plate_confidence)}%
                         </Text>
                         <Progress
@@ -607,8 +610,8 @@ const GuardDashboard: React.FC = () => {
                   w="full"
                   onClick={onManualScanOpen}
                   _hover={{
-                    bg: 'blue.50',
-                    color: 'blue.600',
+                    bg: 'tint-blue',
+                    color: 'ink-blue',
                   }}
                 >
                   Check a plate by hand
@@ -621,8 +624,8 @@ const GuardDashboard: React.FC = () => {
                   w="full"
                   onClick={onOverrideOpen}
                   _hover={{
-                    bg: 'orange.50',
-                    color: 'orange.600',
+                    bg: 'tint-orange',
+                    color: 'ink-orange',
                   }}
                 >
                   Record a manual decision
@@ -646,33 +649,33 @@ const GuardDashboard: React.FC = () => {
         <ModalContent
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
-          <ModalHeader color="gray.700">Check a plate by hand</ModalHeader>
+          <ModalHeader color="text.default">Check a plate by hand</ModalHeader>
           <ModalBody>
             <VStack spacing={4}>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Plate Number</FormLabel>
+                <FormLabel color="text.default">Plate Number</FormLabel>
                 <Input
                   value={manualScanData.plateNumber}
                   onChange={(e) => setManualScanData(prev => ({ ...prev, plateNumber: e.target.value }))}
                   placeholder="Enter plate number"
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'blue.400',
                   }}
                 />
               </FormControl>
               <FormControl>
-                <FormLabel color="gray.700">Location</FormLabel>
+                <FormLabel color="text.default">Location</FormLabel>
                 <Select
                   value={manualScanData.location}
                   onChange={(e) => setManualScanData(prev => ({ ...prev, location: e.target.value }))}
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'blue.400',
                   }}
@@ -684,14 +687,14 @@ const GuardDashboard: React.FC = () => {
                 </Select>
               </FormControl>
               <FormControl>
-                <FormLabel color="gray.700">Notes</FormLabel>
+                <FormLabel color="text.default">Notes</FormLabel>
                 <Textarea
                   value={manualScanData.notes}
                   onChange={(e) => setManualScanData(prev => ({ ...prev, notes: e.target.value }))}
                   placeholder="Additional notes..."
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'blue.400',
                   }}
@@ -709,8 +712,8 @@ const GuardDashboard: React.FC = () => {
                 colorScheme="blue"
                 onClick={handleManualScan}
                 _hover={{
-                  bg: 'blue.50',
-                  color: 'blue.600',
+                  bg: 'tint-blue',
+                  color: 'ink-blue',
                 }}
               >
                 Initiate Scan
@@ -726,33 +729,33 @@ const GuardDashboard: React.FC = () => {
         <ModalContent
           borderRadius="xl"
           border="1px solid"
-          borderColor="gray.200"
+          borderColor="border.default"
         >
-          <ModalHeader color="gray.700">Record a manual decision</ModalHeader>
+          <ModalHeader color="text.default">Record a manual decision</ModalHeader>
           <ModalBody>
             <VStack spacing={4}>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Plate Number</FormLabel>
+                <FormLabel color="text.default">Plate Number</FormLabel>
                 <Input
                   value={overrideData.plateNumber}
                   onChange={(e) => setOverrideData(prev => ({ ...prev, plateNumber: e.target.value }))}
                   placeholder="Enter plate number"
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'orange.400',
                   }}
                 />
               </FormControl>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Override Action</FormLabel>
+                <FormLabel color="text.default">Override Action</FormLabel>
                 <Select
                   value={overrideData.action}
                   onChange={(e) => setOverrideData(prev => ({ ...prev, action: e.target.value }))}
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'orange.400',
                   }}
@@ -763,14 +766,14 @@ const GuardDashboard: React.FC = () => {
                 </Select>
               </FormControl>
               <FormControl isRequired>
-                <FormLabel color="gray.700">Reason for Override</FormLabel>
+                <FormLabel color="text.default">Reason for Override</FormLabel>
                 <Textarea
                   value={overrideData.reason}
                   onChange={(e) => setOverrideData(prev => ({ ...prev, reason: e.target.value }))}
                   placeholder="Explain why you're overriding the system decision..."
                   borderRadius="lg"
                   border="1px solid"
-                  borderColor="gray.200"
+                  borderColor="border.default"
                   _focus={{
                     borderColor: 'orange.400',
                   }}
@@ -788,8 +791,8 @@ const GuardDashboard: React.FC = () => {
                 colorScheme="orange"
                 onClick={handleOverrideAction}
                 _hover={{
-                  bg: 'orange.50',
-                  color: 'orange.600',
+                  bg: 'tint-orange',
+                  color: 'ink-orange',
                 }}
               >
                 Apply Override

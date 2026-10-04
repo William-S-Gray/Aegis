@@ -124,7 +124,7 @@ export default function GuardAlertHistory() {
   return (
     <Box p={{ base: 4, md: 8 }} maxW="7xl" mx="auto">
       <Heading size="lg" mb={1}>Alert history</Heading>
-      <Text color="gray.600" mb={4}>Every camera read, newest first. Set the verdict and leave notes for the next shift.</Text>
+      <Text color="text.muted" mb={4}>Every camera read, newest first. Set the verdict and leave notes for the next shift.</Text>
       <Flex mb={4} gap={3} wrap="wrap" align="center">
         <Select value={filter} onChange={e => setFilter(e.target.value)} width="200px" aria-label="Filter by verdict">
           <option value="">All verdicts</option>
@@ -177,7 +177,7 @@ export default function GuardAlertHistory() {
           </Thead>
           <Tbody>
             {filtered.length === 0 && !loading && (
-              <Tr><Td colSpan={exportCols.length + 4}><Text color="gray.500" py={6} textAlign="center">No alerts match this filter.</Text></Td></Tr>
+              <Tr><Td colSpan={exportCols.length + 4}><Text color="text.muted" py={6} textAlign="center">No alerts match this filter.</Text></Td></Tr>
             )}
             {filtered.map((alert, i) => (
               <Tr key={alert.id} ref={i === filtered.length - 1 ? lastAlertRef : null} verticalAlign="top">
@@ -223,7 +223,7 @@ export default function GuardAlertHistory() {
                   {asArray(alert.comments).map(c => (
                     <Box key={c.id} mb={2} fontSize="sm">
                       <Box as="span" fontWeight="semibold">{c.author_email || "Unknown"}</Box>
-                      <Box as="span" color="gray.500"> · {formatDate(c.created_at, "datetime")}</Box>
+                      <Box as="span" color="text.muted"> · {formatDate(c.created_at, "datetime")}</Box>
                       <Box whiteSpace="pre-wrap">{c.body}</Box>
                     </Box>
                   ))}

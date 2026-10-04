@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { ColorModeScript } from '@chakra-ui/react'
 import './index.css'
 import App from './App.tsx'
 
@@ -17,6 +18,8 @@ window.addEventListener('vite:preloadError', (event) => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    {/* Applies the saved or system colour mode before first paint: no white flash. */}
+    <ColorModeScript initialColorMode="system" />
     <App />
   </StrictMode>,
 )

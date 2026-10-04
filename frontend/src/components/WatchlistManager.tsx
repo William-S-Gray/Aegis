@@ -62,7 +62,7 @@ const WatchlistManager: React.FC = () => {
 
   return (
     <Box>
-      <Text color="gray.600" mb={4}>
+      <Text color="text.muted" mb={4}>
         Plates flagged on sight (stolen, banned, wanted). A camera read raises a WATCHLIST alert
         for the guards and pages the on-call channel. The plate itself is never sent off-site.
       </Text>
@@ -80,7 +80,7 @@ const WatchlistManager: React.FC = () => {
       </HStack>
 
       {entries.length === 0 ? (
-        <Text color="gray.500">No plates on the watchlist.</Text>
+        <Text color="text.muted">No plates on the watchlist.</Text>
       ) : (
         <Table size="sm">
           <Thead><Tr><Th>Plate</Th><Th>Reason</Th><Th>Added</Th><Th /></Tr></Thead>

@@ -50,7 +50,7 @@ const OnSiteNow: React.FC = () => {
       </CardHeader>
       <CardBody pt={2}>
         {visits.length === 0 ? (
-          <Text color="gray.500" fontSize="sm">
+          <Text color="text.muted" fontSize="sm">
             No vehicles on site (needs cameras tagged entry and exit).
           </Text>
         ) : (
@@ -64,7 +64,7 @@ const OnSiteNow: React.FC = () => {
                     {v.visitor_pass && <Badge colorScheme={overdue ? 'red' : 'blue'}>{v.visitor_pass.visitor_name}</Badge>}
                     {overdue && <Badge colorScheme="red" variant="solid">Pass ended</Badge>}
                   </HStack>
-                  <Text fontSize="sm" color="gray.600">{duration(v.entered_at, now)}</Text>
+                  <Text fontSize="sm" color="text.muted">{duration(v.entered_at, now)}</Text>
                 </HStack>
               );
             })}

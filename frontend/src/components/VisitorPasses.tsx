@@ -129,7 +129,7 @@ const VisitorPasses: React.FC = () => {
         </Box>
 
         {passes.length === 0 ? (
-          <Text color="gray.500">No visitors expected.</Text>
+          <Text color="text.muted">No visitors expected.</Text>
         ) : (
           <VStack align="stretch" spacing={3}>
             {passes.map((p) => (
@@ -139,7 +139,7 @@ const VisitorPasses: React.FC = () => {
                     <Text fontWeight="bold" fontFamily="mono">{p.plate_display}</Text>
                     <Badge colorScheme="blue">{p.visitor_name}</Badge>
                   </HStack>
-                  <Text fontSize="sm" color="gray.600">
+                  <Text fontSize="sm" color="text.muted">
                     {new Date(p.valid_from).toLocaleString()} – {new Date(p.valid_until).toLocaleString()}
                     {p.notes ? ` · ${p.notes}` : ''}
                   </Text>

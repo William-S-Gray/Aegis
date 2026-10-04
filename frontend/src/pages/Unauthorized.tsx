@@ -10,14 +10,14 @@ const Unauthorized: React.FC = () => {
       <VStack
         align="stretch"
         spacing={4}
-        bg="white"
+        bg="bg.surface"
         p={8}
         borderRadius="xl"
         border="1px solid"
-        borderColor="gray.200"
+        borderColor="border.default"
       >
         <Heading size="md">Access denied</Heading>
-        <Text color="gray.600">
+        <Text color="text.muted">
           Your account{user ? ` (${user.role})` : ''} does not have permission to view this page. If
           you believe this is a mistake, contact your system administrator.
         </Text>
