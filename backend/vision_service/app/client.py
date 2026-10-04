@@ -161,6 +161,21 @@ class AegisClient:
             logger.debug("Preview frame refused (%s)", response.status_code)
         return response.status_code == 204
 
+    def restart_requests(self) -> list[str]:
+        """
+        Camera ids a guard asked to restart ("*" = all), handed out once each.
+        Never raises: an unreachable API just means nothing to do this time.
+        """
+        try:
+            response = self._request("GET", "/cameras/commands", timeout=3.0)
+            if response.status_code != 200:
+                return []
+            restart = response.json().get("restart", [])
+        except (LoginRefused, httpx.HTTPError, ValueError, AttributeError):
+            logger.debug("Could not fetch camera commands", exc_info=True)
+            return []
+        return [str(item) for item in restart] if isinstance(restart, list) else []
+
     def close(self) -> None:
         self._client.close()
 

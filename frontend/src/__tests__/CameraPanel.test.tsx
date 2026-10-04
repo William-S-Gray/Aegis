@@ -55,3 +55,39 @@ describe('CameraPanel', () => {
     await waitFor(() => expect(screen.getByText('No cameras reporting')).toBeInTheDocument());
   });
 });
+
+describe('CameraPanel restart', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('asks the gate to restart an offline camera', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: [{ id: 'back-gate', name: 'Back Gate', online: false, last_frame_at: 0 }],
+    } as never);
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} } as never);
+
+    renderPanel();
+    await userEvent.click(await screen.findByRole('button', { name: 'Restart this camera' }));
+
+    expect(post).toHaveBeenCalledWith('/cameras/back-gate/restart');
+  });
+
+  it('asks to restart every camera when none is reporting, and offers the device scanner', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    vi.spyOn(api, 'get').mockResolvedValue({ data: [] } as never);
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: {} } as never);
+    const scan = vi.fn();
+
+    render(
+      <ChakraProvider>
+        <CameraPanel onScanWithDevice={scan} />
+      </ChakraProvider>
+    );
+    await screen.findByText('No cameras reporting');
+    await userEvent.click(screen.getByRole('button', { name: 'Restart cameras' }));
+    expect(post).toHaveBeenCalledWith('/cameras/restart');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Scan with this device' }));
+    expect(scan).toHaveBeenCalled();
+  });
+});

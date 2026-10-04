@@ -74,6 +74,37 @@ class CameraFrames:
 camera_frames = CameraFrames()
 
 
+class RestartRequests:
+    """
+    Cameras a guard asked to restart, until the vision service collects them.
+    The vision service asks for them over its own signed-in connection, so no
+    way into the gate machine is opened. "*" means every camera, which also
+    covers one that never started and so is not in the list.
+    """
+
+    ALL = "*"
+
+    def __init__(self) -> None:
+        self._pending: set[str] = set()
+        self._lock = Lock()
+
+    def add(self, camera_id: str) -> None:
+        with self._lock:
+            self._pending.add(camera_id)
+
+    def take(self) -> list[str]:
+        with self._lock:
+            pending, self._pending = sorted(self._pending), set()
+            return pending
+
+    def clear(self) -> None:
+        with self._lock:
+            self._pending.clear()
+
+
+restart_requests = RestartRequests()
+
+
 class _CameraAgeCollector:
     """
     Seconds since each camera's last frame, read at scrape time, for the
@@ -135,6 +166,48 @@ async def publish_frame(
     if not camera_frames.put(camera_id, name.strip() or camera_id, body):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Too many cameras")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _request_restart(db: Session, request: Request, user: User, camera_id: str) -> dict:
+    restart_requests.add(camera_id)
+    audit.record(
+        db,
+        action="camera.restart_requested",
+        request=request,
+        actor_id=user.id,
+        actor_email=user.email,
+        resource_type="camera",
+        resource_id=camera_id,
+    )
+    db.commit()
+    return {"requested": camera_id}
+
+
+@router.post("/restart", status_code=status.HTTP_202_ACCEPTED)
+def restart_all_cameras(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+) -> dict:
+    """Ask the vision service to restart every camera (picked up within seconds)."""
+    return _request_restart(db, request, current_user, RestartRequests.ALL)
+
+
+@router.post("/{camera_id}/restart", status_code=status.HTTP_202_ACCEPTED)
+def restart_camera(
+    camera_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_guard),
+) -> dict:
+    """Ask the vision service to reconnect one camera."""
+    return _request_restart(db, request, current_user, _valid_id(camera_id))
+
+
+@router.get("/commands")
+def take_commands(current_user: User = Depends(require_frame_publisher)) -> dict:
+    """For the vision service: restart requests since it last asked (each is handed out once)."""
+    return {"restart": restart_requests.take()}
 
 
 @router.get("", response_model=list[CameraPublic])

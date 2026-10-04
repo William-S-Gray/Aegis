@@ -10,6 +10,7 @@ import threading
 from types import FrameType
 
 import json
+import time
 import uuid
 from pathlib import Path
 
@@ -18,18 +19,25 @@ from app.config import VisionSettings, get_settings
 from app.detectors.stub import StubPlateDetector, StubPlateReader
 from app.logging_config import configure_logging, run_id_var, source_var
 from app.pipeline import Pipeline
-from app.preview import Preview
-from app.sources import ImageDirectorySource, VideoSource
+from app.preview import Preview, camera_identity
+from app.sources import ImageDirectorySource, VideoSource, is_live
 from app.types import PlateDetector, PlateReader
 
 logger = logging.getLogger("aegis.vision")
 
 _stop = threading.Event()
+# Per camera: set to make it reconnect now (a guard's restart request).
+_reconnect: dict[str, threading.Event] = {}
+# How often the service asks the API whether a guard requested a restart.
+COMMAND_POLL_SECONDS = 5.0
 
 
 def _handle_signal(signum: int, _frame: FrameType | None) -> None:
     logger.info("Received signal %s; finishing the current frame and stopping", signum)
     _stop.set()
+    # Cut short any camera waiting to retry, so stopping is not delayed.
+    for event in _reconnect.values():
+        event.set()
 
 
 def build_detector(settings: VisionSettings) -> tuple[PlateDetector, PlateReader]:
@@ -77,6 +85,7 @@ def build_source(uri: str, settings: VisionSettings):
             site_id=settings.site_id,
             frame_interval_seconds=settings.frame_interval_seconds,
             stop=_stop,
+            reconnect=_reconnect.setdefault(uri, threading.Event()),
         )
     return ImageDirectorySource(uri, site_id=settings.site_id)
 
@@ -126,22 +135,26 @@ def run(settings: VisionSettings, once: bool = False) -> int:
             )
             for uri in sources
         }
-        threads = [
+        def start(index: int, uri: str) -> threading.Thread:
             # copy_context: each thread keeps the run id in its log lines.
-            threading.Thread(
+            thread = threading.Thread(
                 target=contextvars.copy_context().run,
-                args=(_capture, uri, settings, pipeline, preview, once),
+                args=(_capture, uri, settings, pipelines[uri], preview, once),
                 name=f"camera-{index}",
                 daemon=True,
             )
-            for index, (uri, pipeline) in enumerate(pipelines.items())
-        ]
-        for thread in threads:
             thread.start()
+            return thread
+
+        threads = {uri: start(index, uri) for index, uri in enumerate(pipelines)}
+        next_poll = time.monotonic() + COMMAND_POLL_SECONDS
         # Joined with a timeout so the main thread keeps handling SIGTERM.
-        while any(thread.is_alive() for thread in threads):
-            for thread in threads:
+        while any(thread.is_alive() for thread in threads.values()):
+            for thread in list(threads.values()):
                 thread.join(timeout=0.5)
+            if not once and not _stop.is_set() and time.monotonic() >= next_poll:
+                next_poll = time.monotonic() + COMMAND_POLL_SECONDS
+                _apply_restarts(client.restart_requests(), threads, start)
 
         stats: dict[str, int] = {}
         for pipeline in pipelines.values():
@@ -155,6 +168,24 @@ def run(settings: VisionSettings, once: bool = False) -> int:
             _write_stats(settings.stats_path, run_id, stats)
 
     return 0
+
+
+def _apply_restarts(requested: list[str], threads: dict, start) -> None:
+    """
+    A guard asked to restart these cameras ("*" = all): a running camera
+    reconnects now; one whose reader stopped (it crashed) is started again.
+    """
+    if not requested:
+        return
+    for index, uri in enumerate(list(threads)):
+        if "*" not in requested and camera_identity(uri)[0] not in requested:
+            continue
+        if threads[uri].is_alive():
+            logger.info("Restart requested; reconnecting", extra={"uri": uri})
+            _reconnect.setdefault(uri, threading.Event()).set()
+        elif is_live(uri):
+            logger.info("Restart requested; starting the stopped camera", extra={"uri": uri})
+            threads[uri] = start(index, uri)
 
 
 def _capture(uri: str, settings: VisionSettings, pipeline: Pipeline, preview: Preview, once: bool) -> None:
