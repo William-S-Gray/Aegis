@@ -6,6 +6,7 @@ import {
 import { FiCamera, FiEye, FiRefreshCw, FiSmartphone } from 'react-icons/fi';
 import api from '../api';
 import { apiMessage, asArray } from '../utils/safe';
+import { poll } from '../utils/poll';
 
 interface Camera {
   id: string;
@@ -49,11 +50,10 @@ const CameraPanel: React.FC<Props> = ({ onScanWithDevice }) => {
         })
         .catch(() => undefined)
         .finally(() => !cancelled && setLoaded(true));
-    load();
-    const timer = setInterval(load, LIST_POLL_MS);
+    const stop = poll(load, LIST_POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stop();
     };
   }, []);
 
@@ -82,11 +82,10 @@ const CameraPanel: React.FC<Props> = ({ onScanWithDevice }) => {
           current = null;
           setFrameUrl(null);
         });
-    fetchFrame();
-    const timer = setInterval(fetchFrame, FRAME_POLL_MS);
+    const stop = poll(fetchFrame, FRAME_POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stop();
       if (current) URL.revokeObjectURL(current);
     };
   }, [selected, selectedOnline]);

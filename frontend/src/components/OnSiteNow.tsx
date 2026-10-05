@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Badge, Card, CardBody, CardHeader, Heading, HStack, Text, VStack } from '@chakra-ui/react';
 import api from '../api';
 import { asArray } from '../utils/safe';
+import { poll } from '../utils/poll';
 
 interface Visit {
   id: string;
@@ -35,9 +36,7 @@ const OnSiteNow: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => clearInterval(timer);
+    return poll(load, REFRESH_MS);
   }, [load]);
 
   return (
