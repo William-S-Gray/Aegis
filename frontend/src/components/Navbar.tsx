@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
 import { asArray } from '../utils/safe';
+import { poll } from '../utils/poll';
 import { NAV, homeFor } from '../utils/nav';
 import ChangePasswordDialog from './ChangePasswordDialog';
 import { API_BASE_URL } from '../config';
@@ -60,7 +61,7 @@ const Navbar: React.FC = () => {
     let cancelled = false;
     const origin = API_BASE_URL.replace(/\/api\/v\d+$/, '');
 
-    const poll = async () => {
+    const check = async () => {
       let apiHealth: Health = 'offline';
       let database: Health = 'unknown';
       try {
@@ -83,11 +84,10 @@ const Navbar: React.FC = () => {
       if (!cancelled) setSystemStatus({ api: apiHealth, database, cameras });
     };
 
-    poll();
-    const timer = setInterval(poll, 30000);
+    const stop = poll(check, 30000);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stop();
     };
   }, [canReview]);
 
@@ -98,7 +98,7 @@ const Navbar: React.FC = () => {
     }
     let cancelled = false;
 
-    const poll = () => {
+    const check = () =>
       api
         .get('/alerts/review-queue')
         .then((res) => {
@@ -107,13 +107,11 @@ const Navbar: React.FC = () => {
         .catch(() => {
           // A transient failure should not blank the badge or spam the user.
         });
-    };
 
-    poll();
-    const timer = setInterval(poll, 30000);
+    const stop = poll(check, 30000);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stop();
     };
   }, [canReview]);
 
