@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # any validator runs. Never use "*" alongside credentials.
     cors_origins: str = "http://localhost:5173"
 
+    # Comma-separated emails of public demo accounts. They can sign in and read
+    # everything their role can, but every write is refused (see deps.py), so a
+    # shared demo login can't change the demo data or its own password.
+    demo_readonly_emails: str = ""
+
     # Shared state across replicas (login throttling, WebSocket tickets).
     # Required outside development; see app/core/store.py.
     redis_url: str = ""
@@ -151,6 +156,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def demo_readonly_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.demo_readonly_emails.split(",") if e.strip()}
 
     @property
     def is_production(self) -> bool:
