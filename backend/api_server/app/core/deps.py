@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.core.logging import bind_log_context
 from app.core.security import decode_token
 from app.database import get_db
@@ -22,7 +23,13 @@ _UNAUTHENTICATED = HTTPException(
 )
 
 
+# Writes a read-only demo account may still make: ending its own session, and the
+# ticket that opens the live-alert WebSocket (a read).
+_DEMO_ALLOWED_WRITES = {"/api/v1/auth/logout", "/api/v1/auth/ws-ticket"}
+
+
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
@@ -44,6 +51,13 @@ def get_current_user(
     # Every log line emitted for the rest of this request carries the actor,
     # so "who did this" never has to be reconstructed by hand.
     bind_log_context(actor_id=str(user.id), actor_role=user.role.value)
+
+    if (
+        request.method not in ("GET", "HEAD", "OPTIONS")
+        and request.url.path not in _DEMO_ALLOWED_WRITES
+        and user.email.lower() in get_settings().demo_readonly_email_set
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Demo accounts are read-only.")
     return user
 
 
