@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Box, Heading, Stat, StatLabel, StatNumber, SimpleGrid, Progress, Input, Button, HStack, Select, Spinner, Alert } from "@chakra-ui/react";
+import { Box, Heading, Stat, StatLabel, StatNumber, SimpleGrid, Progress, Input, Button, Flex, Select, Spinner, Alert } from "@chakra-ui/react";
 import api from "../api";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import { useAuth } from "../context/AuthContext";
@@ -90,7 +90,7 @@ export default function AdminAnalytics() {
   return (
     <Box p={6}>
       <Heading mb={4}>Analytics Dashboard</Heading>
-      <HStack mb={4} spacing={4}>
+      <Flex mb={4} gap={3} wrap="wrap" align="center">
         {user?.role === "admin" && (
           <Select value={siteId} onChange={e => setSiteId(e.target.value)} width="200px" placeholder="All Sites">
             {sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
@@ -105,7 +105,7 @@ export default function AdminAnalytics() {
         <Button colorScheme="green" onClick={() => exportExcel(common, "common_mismatches.xlsx", COMMON_COLUMNS, "Common Mismatches", formatCell)}>Export Common Excel</Button>
         <Button colorScheme="green" onClick={() => exportPDF(mismatches, "mismatches.pdf", MISMATCH_COLUMNS, formatCell)}>Export Mismatches PDF</Button>
         <Button colorScheme="green" onClick={() => exportPDF(common, "common_mismatches.pdf", COMMON_COLUMNS, formatCell)}>Export Common PDF</Button>
-      </HStack>
+      </Flex>
       {loading && <Spinner mt={4} />}
       {error && <Alert status="error" mb={4}>{error}</Alert>}
       <SimpleGrid columns={2} spacing={6} mb={6}>
